@@ -1,0 +1,34 @@
+name: Publicar Instagram (calendário ABREV)
+
+# Lê o quadro "Calendário ABREV" no Trello e publica os cards de "Agendado"
+# cujo horário já venceu. Roda a cada 15 min; também dá para rodar na mão.
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # a cada 15 minutos (horário UTC)
+  workflow_dispatch: {}       # botão "Run workflow" para teste manual
+
+permissions:
+  contents: write             # para o host de mídia (grava/remove em media/)
+
+concurrency:
+  group: publicar-ig
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Publicar pautas vencidas
+        run: node publisher.mjs
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+          MEDIA_REPO: Abrev-IA/abrev-media
+          MEDIA_BRANCH: main
+          TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
+          TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
