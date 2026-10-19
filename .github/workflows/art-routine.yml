@@ -1,0 +1,33 @@
+name: Gerar artes do mês (calendário ABREV)
+
+# Mensalmente (dia 15), para cada card do calendário em "Rascunho", aciona a esteira do
+# cockpit (art_runner) e anexa as artes aprovadas ao card. Também roda na mão.
+on:
+  schedule:
+    - cron: "0 12 15 * *"   # dia 15 de cada mês, 12:00 UTC (~9h BRT)
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gerar-artes-abrev
+  cancel-in-progress: false
+
+jobs:
+  gerar-artes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Gerar e anexar as artes do mês
+        run: node art_routine.mjs
+        env:
+          TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
+          TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
+          COCKPIT_BASE: https://abrev-cockpit.administradorabrev.workers.dev
+          COCKPIT_USER: ${{ secrets.COCKPIT_USER }}
+          COCKPIT_PASSWORD: ${{ secrets.COCKPIT_PASSWORD }}
