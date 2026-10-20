@@ -10,7 +10,19 @@ import { mkdtemp, rm, readFile, writeFile, copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { produceArts } from "./art_runner.mjs";
-import { buscarImagem, registrarUso } from "./image_bank.mjs";
+
+// O banco local são 146 MB de PNG na máquina do Alan; o repositório que o cron usa não
+// tem nem o módulo nem as imagens. Import estático derrubava a rotina inteira lá com
+// MODULE_NOT_FOUND, antes de gerar qualquer coisa. Carregado assim, a camada 1 some
+// quando não existe e o reaproveitamento fica com o banco do R2, dentro do cockpit.
+let bancoLocal;
+async function banco() {
+  if (bancoLocal === undefined) {
+    bancoLocal = await import("./image_bank.mjs").catch(() => null);
+    if (!bancoLocal) console.log("banco local indisponível aqui — o reaproveitamento fica por conta do banco do cockpit.");
+  }
+  return bancoLocal;
+}
 
 const T = "https://api.trello.com/1";
 const LIST_RASCUNHO = process.env.TRELLO_LIST_RASCUNHO || "6ad43ed930b50a2b6519bdf7";
@@ -49,13 +61,22 @@ function palavrasVisuais(card) {
   return linha ? linha.trim().slice("[VISUAL]".length).trim() : null;
 }
 
+// A legenda e so o texto ANTES do primeiro marcador. Depois dele vem controle interno
+// ([RASCUNHO], [VISUAL]) e nota de conferencia da equipe ("CONFERENCIA DE ENTREGAS —
+// 20/10/2026 ..."), que e recado de bastidor: nao e legenda e nao pode virar briefing.
+// Marcador = linha entre colchetes, ou titulo em caixa alta terminando em data.
+function legendaDoCard(desc) {
+  const linhas = String(desc || "").split(/\r?\n/);
+  const marcador = (l) => {
+    const s = l.trim();
+    return s.startsWith("[") || /^[^a-za-ÿ]{6,}[—-]\s*\d{2}\/\d{2}\/\d{2,4}\s*$/.test(s);
+  };
+  const corte = linhas.findIndex(marcador);
+  return (corte < 0 ? linhas : linhas.slice(0, corte)).join("\n").trim();
+}
+
 function buildBriefing(card, fmt) {
-  const caption = (card.desc || "")
-    .replace(/\[RASCUNHO[^\]]*\]/gi, "")
-    .split(/\r?\n/)
-    .filter((l) => !l.trim().toUpperCase().startsWith("[VISUAL]"))
-    .join("\n")
-    .trim();
+  const caption = legendaDoCard(card.desc);
   const tema = card.name.replace(/^\d{2}\/\d{2}\s*·\s*[^·]+·\s*/, "").trim();
   return {
     objetivo: `${tema}. ${caption}`.slice(0, 650),
@@ -170,7 +191,11 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false } =
     `cota deixa ${plano.porCota}, ritmo pede ${plano.porRitmo}). Já usados hoje: ${estado.paginas} pág. ~${estado.tokens} tokens.`,
   );
   if (!dryRun && plano.permitido <= 0) {
-    console.log("Cota do dia esgotada. Rode de novo amanhã — os cards prontos são pulados.");
+    // Permitido zero tem duas causas opostas, e confundir as duas assusta à toa: ou não
+    // sobrou cota hoje, ou simplesmente não há mais nada para fazer.
+    console.log(paginasPendentes === 0
+      ? "Nada pendente: todos os cards do mês já têm arte."
+      : "Cota do dia esgotada. Rode de novo amanhã — os cards prontos são pulados.");
     return;
   }
 
@@ -208,7 +233,8 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false } =
       const briefing = buildBriefing(card, fmt);
       const visual = palavrasVisuais(card);
       const consulta = visual || `${card.name} ${briefing.objetivo}`;
-      const achado = await buscarImagem(consulta, { minimo: visual ? 1 : 2 }).catch(() => null);
+      const bco = await banco();
+      const achado = bco ? await bco.buscarImagem(consulta, { minimo: visual ? 1 : 2 }).catch(() => null) : null;
       if (achado) {
         briefing.midia = achado.arquivo;
         console.log(`  banco: reaproveitando ${achado.meta.arquivo} (score ${achado.score}, por ${visual ? "palavras visuais" : "titulo"})`);
@@ -216,7 +242,7 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false } =
         console.log(`  banco: nada no tema${visual ? "" : " (card sem [VISUAL])"}, a esteira vai gerar`);
       }
       const { runId, files } = await produceArts(briefing, dir);
-      if (achado) await registrarUso(achado.arquivo).catch(() => {});
+      if (achado) await bco.registrarUso(achado.arquivo).catch(() => {});
       // Guarda do tema: confere a primeira arte do lote ANTES de anexar qualquer coisa.
       if (!temaConferido && files.length) {
         temaConferido = true;
