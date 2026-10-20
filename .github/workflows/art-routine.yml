@@ -28,6 +28,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      # Os reels precisam de ffmpeg (montagem) e puppeteer (camada da ABREV). Sem este
+      # passo o lote até roda, mas os cards de reel saem só com a capa.
+      - name: Instalar dependências
+        run: npm install --no-audit --no-fund
       - name: Gerar e anexar as artes do mês
         run: node art_routine.mjs
         env:
@@ -36,6 +40,8 @@ jobs:
           COCKPIT_BASE: https://abrev-cockpit.administradorabrev.workers.dev
           COCKPIT_USER: ${{ secrets.COCKPIT_USER }}
           COCKPIT_PASSWORD: ${{ secrets.COCKPIT_PASSWORD }}
+          # Banco gratuito de footage dos reels. Sem a chave, a arte sai e o reel não.
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           # Ajuste sem mexer no código se o consumo real divergir da estimativa.
           COTA_DIARIA_TOKENS: "250000"
           TOKENS_POR_PAGINA: "15000"
