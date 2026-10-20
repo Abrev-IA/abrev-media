@@ -123,9 +123,50 @@ async function isDarkArt(file) {
 async function attachToCard(cardId, filePath, name) {
   const { key, token } = tauth();
   const form = new FormData();
-  form.set("file", new Blob([await readFile(filePath)], { type: "image/png" }), name);
+  const tipo = /\.mp4$/i.test(name) ? "video/mp4" : "image/png";
+  form.set("file", new Blob([await readFile(filePath)], { type: tipo }), name);
   const res = await fetch(`${T}/cards/${cardId}/attachments?key=${key}&token=${token}`, { method: "POST", body: form });
   if (!res.ok) throw new Error(`attach ${res.status}`);
+}
+
+// Monta e anexa o vídeo do reel. Só o vídeo: a capa continua vindo da esteira.
+// Idempotente — card que já tem .mp4 é pulado, igual às artes.
+async function anexarReel(card, fmt, { refazerReels = false, usados = [] } = {}) {
+  const videosAntigos = (card.attachments || []).filter((a) => a.isUpload && /\.mp4$/i.test(a.name || ""));
+  if (videosAntigos.length && !refazerReels) {
+    console.log("  reel: card já tem vídeo, pulando.");
+    return null;
+  }
+  // reel.mjs precisa de ffmpeg e puppeteer. Onde não houver (o cron roda sem instalar
+  // dependências), o card fica com a capa e o vídeo entra na rodada seguinte, em vez de
+  // derrubar o lote inteiro.
+  const mod = await import("./reel.mjs").catch(() => null);
+  if (!mod) { console.log("  reel: ffmpeg/puppeteer indisponíveis aqui, só a capa foi anexada."); return null; }
+
+  const tema = card.name.replace(/^\d{2}\/\d{2}\s*·\s*[^·]+·\s*/, "").trim();
+  // O amarelo cai no fecho da frase, que é onde está a carga do título. Pegar as duas
+  // últimas palavras erra menos que tentar achar "a palavra importante".
+  const partes = tema.split(/\s+/);
+  const destaque = partes.length > 3 ? partes.slice(-2).join(" ") : "";
+  const titulo = destaque ? partes.slice(0, -2).join(" ") : tema;
+  const legenda = legendaDoCard(card.desc);
+  const subtitulo = legenda.split(/(?<=[.!?])\s/)[0]?.slice(0, 120) || "";
+
+  const dir = await mkdtemp(join(tmpdir(), "abrev-reel-"));
+  try {
+    const saida = join(dir, "reel.mp4");
+    const { footage } = await mod.gerarReel({
+      title: titulo, highlight: destaque, subtitle: subtitulo,
+      visual: palavrasVisuais(card) || tema,
+    }, saida, { excluir: usados });
+    usados.push(footage.arquivo);
+    await attachToCard(card.id, saida, `${card.name.replace(/[^\w]+/g, "_").slice(0, 40)}_reel.mp4`);
+    // Só depois de anexar o novo: o card nunca fica sem vídeo no meio da troca.
+    for (const v of videosAntigos) {
+      await trello(`/cards/${card.id}/attachments/${v.id}`, {}, "DELETE").catch(() => {});
+    }
+    return { duracao: 10, origem: footage.origem, trocado: videosAntigos.length };
+  } finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
 }
 
 // ---- Orçamento diário e ritmo até a entrega ----
@@ -169,7 +210,9 @@ function planoDoDia(paginasRestantes, estado) {
   return { permitido: Math.min(porRitmo, porCota), porRitmo, porCota, diasRestantes, hoje };
 }
 
-async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false } = {}) {
+async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false, refazerReels = false } = {}) {
+  // Footage já usado nesta rodada, para dois reels do mesmo mês não saírem com o mesmo plano.
+  const footageUsado = [];
   const cards = await trello(`/lists/${listId}/cards`, { fields: "name,desc", attachments: "true", attachment_fields: "name,isUpload" });
   console.log(`${cards.length} card(s) em Rascunho.${dryRun ? "  [DRY-RUN: nada é gerado, nenhum crédito gasto]" : ""}${refazer ? "  [REFAZER: substitui a arte existente]" : ""}`);
   const summary = [];
@@ -183,6 +226,14 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false } =
     if (temArte && !refazer) return total;
     return total + f.paginas;
   }, 0);
+  // Reel que só precisa de vídeo não passa pela esteira e não consome cota nenhuma,
+  // então não pode ser barrado pela trava de páginas — senão o mês fecha com os cards
+  // de reel sem vídeo, que foi exatamente o que aconteceu em novembro.
+  const reelsPendentes = cards.filter((c) => {
+    const f = parseFormat(c.name);
+    if (!f.cover) return false;
+    return refazerReels || !(c.attachments || []).some((a) => a.isUpload && /\.mp4$/i.test(a.name || ""));
+  }).length;
   const estado = await lerEstado();
   const plano = planoDoDia(paginasPendentes, estado);
   let paginasHoje = 0;
@@ -190,7 +241,8 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false } =
     `ritmo: ${plano.permitido} pág. hoje (faltam ${paginasPendentes} em ${plano.diasRestantes} dia(s) até o dia ${DIA_ENTREGA}; ` +
     `cota deixa ${plano.porCota}, ritmo pede ${plano.porRitmo}). Já usados hoje: ${estado.paginas} pág. ~${estado.tokens} tokens.`,
   );
-  if (!dryRun && plano.permitido <= 0) {
+  if (reelsPendentes) console.log(`${reelsPendentes} reel(s) ${refazerReels ? "para refazer o vídeo" : "sem vídeo"} — esses saem fora da cota, porque não passam pela esteira.`);
+  if (!dryRun && plano.permitido <= 0 && !reelsPendentes) {
     // Permitido zero tem duas causas opostas, e confundir as duas assusta à toa: ou não
     // sobrou cota hoje, ou simplesmente não há mais nada para fazer.
     console.log(paginasPendentes === 0
@@ -204,11 +256,31 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false } =
     const artesAntigas = (card.attachments || []).filter((a) => a.isUpload && /\.png$/i.test(a.name || ""));
     if (fmt.skip) { console.log("PULA:", card.name, "—", fmt.reason); summary.push(`SKIP  ${card.name}`); continue; }
     // Retomada: card que já tem arte foi feito numa execução anterior.
-    if (artesAntigas.length && !refazer) { console.log("JÁ TEM ARTE:", card.name); summary.push(`TEM   ${card.name}`); continue; }
+    const temVideo = (card.attachments || []).some((a) => a.isUpload && /\.mp4$/i.test(a.name || ""));
+    const faltaSoOVideo = artesAntigas.length && !refazer && fmt.cover && (!temVideo || refazerReels);
+    if (artesAntigas.length && !refazer && !faltaSoOVideo) {
+      console.log("JÁ TEM ARTE:", card.name); summary.push(`TEM   ${card.name}`); continue;
+    }
     if (dryRun) {
       const troca = artesAntigas.length ? ` (substitui ${artesAntigas.length} arte(s) atual(is))` : "";
-      console.log("GERARIA:", card.name, `— ${fmt.formatos.join("/")}, ${fmt.paginas} pág.${troca}`);
-      summary.push(`FARIA ${card.name}${troca}`);
+      if (faltaSoOVideo) {
+        console.log("FARIA O REEL:", card.name, "— capa já existe, falta só o vídeo (custo zero)");
+        summary.push(`REEL  ${card.name}`);
+      } else {
+        console.log("GERARIA:", card.name, `— ${fmt.formatos.join("/")}, ${fmt.paginas} pág.${troca}${fmt.cover ? " + reel" : ""}`);
+        summary.push(`FARIA ${card.name}${troca}`);
+      }
+      continue;
+    }
+    // Capa pronta e vídeo faltando: faz só o vídeo. Não passa pela esteira, não gasta
+    // crédito e não entra no ritmo do dia — por isso vem antes da trava de páginas.
+    if (faltaSoOVideo) {
+      const reel = await anexarReel(card, fmt, { refazerReels, usados: footageUsado }).catch((e) => { console.error("  reel não saiu:", e.message); return null; });
+      if (reel) {
+        await trello(`/cards/${card.id}/actions/comments`, { text: `🎬 Reel de ${reel.duracao}s montado com footage de ${reel.origem} e a identidade da ABREV por cima. Sem custo de API.` }, "POST");
+        console.log("  OK — reel anexado.");
+        summary.push(`REEL  ${card.name}`);
+      } else summary.push(`SEM REEL ${card.name}`);
       continue;
     }
 
@@ -264,8 +336,16 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false } =
           await trello(`/cards/${card.id}/attachments/${a.id}`, {}, "DELETE").then(() => removidas++).catch(() => {});
         }
       }
-      await trello(`/cards/${card.id}/actions/comments`, { text: `🎨 ${files.length} arte(s) no tema escuro geradas pela esteira do cockpit (run ${runId}).${removidas ? ` Versão anterior removida (${removidas}).` : ""}` }, "POST");
-      console.log("  OK —", files.length, "arte(s) anexada(s)." + (removidas ? ` ${removidas} antiga(s) removida(s).` : ""));
+      // Reel precisa de VÍDEO, e a esteira só faz imagem. O vídeo sai do banco gratuito
+      // com a identidade por cima (reel.mjs): custo zero, enquanto gerar vídeo por IA
+      // custaria dólares por peça. A arte da esteira continua sendo a capa do reel.
+      const reel = fmt.cover ? await anexarReel(card, fmt, { refazerReels, usados: footageUsado }).catch((e) => {
+        console.error("  reel não saiu:", e.message);
+        return null;
+      }) : null;
+
+      await trello(`/cards/${card.id}/actions/comments`, { text: `🎨 ${files.length} arte(s) no tema escuro geradas pela esteira do cockpit (run ${runId}).${reel ? ` 🎬 Reel de ${reel.duracao}s montado com footage de ${reel.origem}.` : ""}${removidas ? ` Versão anterior removida (${removidas}).` : ""}` }, "POST");
+      console.log("  OK —", files.length, "arte(s) anexada(s)." + (reel ? " + reel." : "") + (removidas ? ` ${removidas} antiga(s) removida(s).` : ""));
       summary.push(`OK(${files.length}) ${card.name}`);
       paginasHoje += fmt.paginas;
       estado.paginas += fmt.paginas;
@@ -298,4 +378,6 @@ const args = process.argv.slice(2);
 run(args.find((a) => !a.startsWith("--")), {
   dryRun: args.includes("--dry-run"),
   refazer: args.includes("--refazer"),
+  // --refazer-reels: troca só o vídeo dos reels, sem passar pela esteira nem gastar crédito.
+  refazerReels: args.includes("--refazer-reels"),
 }).catch((e) => { console.error("FATAL:", e.message); process.exit(1); });
