@@ -1,10 +1,15 @@
 name: Gerar artes do mês (calendário ABREV)
 
-# Mensalmente (dia 15), para cada card do calendário em "Rascunho", aciona a esteira do
-# cockpit (art_runner) e anexa as artes aprovadas ao card. Também roda na mão.
+# Do dia 15 ao 20, para cada card do calendário em "Rascunho", aciona a esteira do cockpit
+# (art_runner) e anexa as artes aprovadas ao card. Também roda na mão.
+#
+# Roda todo dia (e não só no 15) porque a cota gratuita da OpenAI é DIÁRIA: 250 mil tokens
+# no gpt-4.1, que é o modelo da auditoria visual. A rotina divide as páginas que faltam
+# pelos dias restantes até o dia 20 e para quando cumpre o ritmo do dia. Card já pronto é
+# pulado, então rodar de novo é seguro e barato.
 on:
   schedule:
-    - cron: "0 12 15 * *"   # dia 15 de cada mês, 12:00 UTC (~9h BRT)
+    - cron: "0 12 15-20 * *"   # todo dia 15 a 20, 12:00 UTC (~9h BRT)
   workflow_dispatch: {}
 
 permissions:
@@ -31,3 +36,7 @@ jobs:
           COCKPIT_BASE: https://abrev-cockpit.administradorabrev.workers.dev
           COCKPIT_USER: ${{ secrets.COCKPIT_USER }}
           COCKPIT_PASSWORD: ${{ secrets.COCKPIT_PASSWORD }}
+          # Ajuste sem mexer no código se o consumo real divergir da estimativa.
+          COTA_DIARIA_TOKENS: "250000"
+          TOKENS_POR_PAGINA: "15000"
+          DIA_ENTREGA: "20"
