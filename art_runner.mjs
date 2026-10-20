@@ -17,7 +17,7 @@
 //   node --env-file=.env art_runner.mjs run '<briefing JSON>' [pastaSaida]
 // briefing JSON: {objetivo, canais:[], formatos:[], fonte, dimensoes?, paginas?}
 
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const BASE = (process.env.COCKPIT_BASE || "https://abrev-cockpit.administradorabrev.workers.dev").replace(/\/$/, "");
@@ -55,9 +55,16 @@ const COMPOSITION_HINT =
   " informações por página, preservando os fatos (ex.: R$ 59 bi). Priorize legibilidade e respiro;" +
   " o Designer ajusta a quebra de linhas conforme a composição.";
 
+// Quando sobe uma foto do banco, o Designer precisa saber que ela e PARA USAR, nao uma
+// referencia de composicao a imitar. Sem isso ele tende a gerar imagem nova do zero.
+const REFERENCE_HINT =
+  " IMAGEM ANEXADA: a foto enviada como midia de apoio e o conteudo grafico desta peca." +
+  " Use graphicMode 'reference' e preserve essa fotografia; NAO gere imagem nova." +
+  " Componha o texto ao redor dela e escolha o tema de fundo que melhor a valoriza.";
+
 function toPayload(b) {
   const payload = {
-    0: (b.objetivo || "") + COMPOSITION_HINT,
+    0: (b.objetivo || "") + COMPOSITION_HINT + (b.midia ? REFERENCE_HINT : ""),
     1: (b.canais || ["Instagram", "LinkedIn"]).join("\n"),
     2: (b.formatos || ["Carrossel"]).join("\n"),
     3: (b.fonte || "") + COMPOSITION_HINT,
@@ -82,6 +89,16 @@ async function createRun(cookie, briefing) {
     const form = new FormData();
     form.set("flowKey", "conteudo");
     form.set("payload", JSON.stringify(payload));
+    // Midia de apoio: quando o briefing traz uma foto do banco local, ela sobe junto
+    // com o run. O Designer entao usa graphicMode "reference" e a esteira NAO gera
+    // imagem nova — e a economia, sem abrir mao da auditoria.
+    if (briefing.midia) {
+      const buf = await readFile(briefing.midia);
+      const ext = briefing.midia.toLowerCase().split(".").pop();
+      const tipo = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+      const nome = briefing.midia.split(/[\/]/).pop();
+      form.set("file", new Blob([buf], { type: tipo }), nome);
+    }
     const res = await fetch(`${BASE}/api/workflows`, { method: "POST", headers: { cookie }, body: form });
     const json = await res.json().catch(() => ({}));
     if (res.status === 422 && json.needsInformation) {
