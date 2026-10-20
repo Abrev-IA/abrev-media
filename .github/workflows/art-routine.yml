@@ -32,6 +32,22 @@ jobs:
       # passo o lote até roda, mas os cards de reel saem só com a capa.
       - name: Instalar dependências
         run: npm install --no-audit --no-fund
+
+      # O postinstall do puppeteer NÃO baixou o Chrome aqui (a execução de 20/10 instalou
+      # 47 pacotes em 8s, sem uma linha de download), e sem navegador a camada da ABREV
+      # não renderiza. O runner do Ubuntu já traz um Chrome: usamos esse, que além de
+      # garantido é mais rápido. Não achando nenhum, o passo avisa e o lote segue — os
+      # cards de reel ficam só com a capa em vez de o mês inteiro falhar.
+      - name: Localizar o Chrome do runner
+        id: chrome
+        run: |
+          caminho=$(command -v google-chrome || command -v chromium-browser || command -v chromium || true)
+          if [ -z "$caminho" ]; then
+            echo "::warning::Chrome não encontrado no runner — os reels vão sair só com a capa."
+          else
+            echo "Chrome: $caminho ($($caminho --version 2>/dev/null))"
+          fi
+          echo "caminho=$caminho" >> "$GITHUB_OUTPUT"
       - name: Gerar e anexar as artes do mês
         run: node art_routine.mjs
         env:
@@ -42,6 +58,8 @@ jobs:
           COCKPIT_PASSWORD: ${{ secrets.COCKPIT_PASSWORD }}
           # Banco gratuito de footage dos reels. Sem a chave, a arte sai e o reel não.
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          # O puppeteer lê esta variável sozinho; vazia, ele procura o Chrome dele.
+          PUPPETEER_EXECUTABLE_PATH: ${{ steps.chrome.outputs.caminho }}
           # Ajuste sem mexer no código se o consumo real divergir da estimativa.
           COTA_DIARIA_TOKENS: "250000"
           TOKENS_POR_PAGINA: "15000"
