@@ -1,0 +1,55 @@
+name: E-mail de aprovação (dia 20)
+
+# Passo 02 do ciclo: todo dia 20, manda para a diretoria o cronograma do MÊS SEGUINTE
+# com as artes que a esteira gerou entre os dias 15 e 20, e pede o aval.
+#
+# Roda às 15:00 UTC (12h BRT) de propósito: a rotina de artes do dia 20 roda às 12:00 UTC,
+# então quando este disparo acontece a última leva de artes já está anexada nos cards.
+#
+# Sem os segredos SMTP_USER/SMTP_PASS o job falha sem enviar nada — é de propósito:
+# nenhum e-mail sai para terceiros antes de você configurar o remetente.
+on:
+  schedule:
+    - cron: "0 15 20 * *"   # todo dia 20, 15:00 UTC (~12h BRT)
+  workflow_dispatch:
+    inputs:
+      previa:
+        description: "Só montar a prévia, sem enviar"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write           # o host de mídia grava as artes em media/
+
+concurrency:
+  group: aprovacao-abrev
+  cancel-in-progress: false
+
+jobs:
+  aprovacao:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Montar e enviar o e-mail de aprovação
+        run: node aprovacao.mjs ${{ (github.event_name == 'workflow_dispatch' && inputs.previa) && '' || '--enviar' }}
+        env:
+          TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
+          TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          MEDIA_REPO: Abrev-IA/abrev-media
+          MEDIA_BRANCH: main
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          APROVACAO_PARA: ${{ secrets.APROVACAO_PARA }}
+          APROVACAO_COPIA: ${{ secrets.APROVACAO_COPIA }}
+      - name: Guardar a prévia do e-mail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: email-aprovacao
+          path: aprovacao-*.html
+          if-no-files-found: ignore
