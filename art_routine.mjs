@@ -6,10 +6,11 @@
 // Env: TRELLO_KEY, TRELLO_TOKEN, COCKPIT_* (art_runner). Opcional TRELLO_LIST_RASCUNHO.
 // Uso: node --env-file=.env art_routine.mjs [listId]
 
-import { mkdtemp, rm, readFile, copyFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile, copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { produceArts } from "./art_runner.mjs";
+import { buscarImagem, registrarUso } from "./image_bank.mjs";
 
 const T = "https://api.trello.com/1";
 const LIST_RASCUNHO = process.env.TRELLO_LIST_RASCUNHO || "6ad43ed930b50a2b6519bdf7";
@@ -36,8 +37,25 @@ function parseFormat(name) {
   return { formatos: ["Post estático"], paginas: 1 };
 }
 
+// Palavras visuais do card: linha "[VISUAL] caminhao, estrada, volume" na descricao.
+// Existe porque o titulo do card descreve o ASSUNTO, nao a imagem — e o banco e indexado
+// por objeto. Sem isso, a busca compara "5 sinais de alerta" com "caminhao" e erra.
+// Ficou na descricao, e nao em campo personalizado, porque o power-up Custom Fields
+// esta desabilitado no quadro (a API devolve 403 ao criar o campo e ao habilitar o power-up).
+function palavrasVisuais(card) {
+  const linha = String(card.desc || "")
+    .split(/\r?\n/)
+    .find((l) => l.trim().toUpperCase().startsWith("[VISUAL]"));
+  return linha ? linha.trim().slice("[VISUAL]".length).trim() : null;
+}
+
 function buildBriefing(card, fmt) {
-  const caption = (card.desc || "").replace(/\[RASCUNHO[^\]]*\]/gi, "").trim();
+  const caption = (card.desc || "")
+    .replace(/\[RASCUNHO[^\]]*\]/gi, "")
+    .split(/\r?\n/)
+    .filter((l) => !l.trim().toUpperCase().startsWith("[VISUAL]"))
+    .join("\n")
+    .trim();
   const tema = card.name.replace(/^\d{2}\/\d{2}\s*·\s*[^·]+·\s*/, "").trim();
   return {
     objetivo: `${tema}. ${caption}`.slice(0, 650),
@@ -89,11 +107,72 @@ async function attachToCard(cardId, filePath, name) {
   if (!res.ok) throw new Error(`attach ${res.status}`);
 }
 
+// ---- Orçamento diário e ritmo até a entrega ----
+//
+// A cota gratuita da OpenAI é de 250 mil tokens/dia no gpt-4.1, que é o modelo da
+// auditoria visual — e ela manda a imagem dentro do prompt, então cada página auditada
+// pesa muito em tokens de entrada. Estourar a cota volta a ser cobrado.
+//
+// IMPORTANTE: esta rotina NÃO mede tokens. Quem gasta é o Worker do cockpit, que não
+// devolve consumo. O controle aqui é por ESTIMATIVA de tokens por página, calibrada
+// pelo consumo real observado (~669 mil tokens num dia de 50 imagens, ou seja ~13 mil
+// por página). Arredondamos para cima: sobrar cota não custa nada, estourar custa.
+// Ajuste por variável de ambiente se o consumo real divergir.
+const TOKENS_POR_PAGINA = Number(process.env.TOKENS_POR_PAGINA || 15000);
+const COTA_DIARIA = Number(process.env.COTA_DIARIA_TOKENS || 250000);
+const DIA_ENTREGA = Number(process.env.DIA_ENTREGA || 20);
+const ESTADO = new URL(".estado_diario.json", import.meta.url);
+
+const hojeISO = () => new Date().toISOString().slice(0, 10);
+
+async function lerEstado() {
+  try {
+    const e = JSON.parse(await readFile(ESTADO, "utf8"));
+    if (e.dia === hojeISO()) return e;
+  } catch { /* primeiro uso ou dia virou: começa zerado */ }
+  return { dia: hojeISO(), tokens: 0, paginas: 0 };
+}
+
+async function gravarEstado(e) {
+  await writeFile(ESTADO, JSON.stringify(e, null, 2));
+}
+
+// Quantas páginas fazer hoje: divide o que falta pelos dias que restam até a entrega,
+// e nunca passa do que ainda cabe na cota do dia. O ritmo evita dois extremos — fazer
+// tudo hoje e estourar a cota, ou fazer de menos e não ficar pronto no dia 20.
+function planoDoDia(paginasRestantes, estado) {
+  const hoje = new Date().getDate();
+  const diasRestantes = Math.max(1, DIA_ENTREGA - hoje);
+  const porRitmo = Math.ceil(paginasRestantes / diasRestantes);
+  const porCota = Math.max(0, Math.floor((COTA_DIARIA - estado.tokens) / TOKENS_POR_PAGINA));
+  return { permitido: Math.min(porRitmo, porCota), porRitmo, porCota, diasRestantes, hoje };
+}
+
 async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false } = {}) {
   const cards = await trello(`/lists/${listId}/cards`, { fields: "name,desc", attachments: "true", attachment_fields: "name,isUpload" });
   console.log(`${cards.length} card(s) em Rascunho.${dryRun ? "  [DRY-RUN: nada é gerado, nenhum crédito gasto]" : ""}${refazer ? "  [REFAZER: substitui a arte existente]" : ""}`);
   const summary = [];
   let temaConferido = false, interrompido = null;
+
+  // Páginas que ainda faltam, para o ritmo saber o tamanho do que resta.
+  const paginasPendentes = cards.reduce((total, c) => {
+    const f = parseFormat(c.name);
+    if (f.skip) return total;
+    const temArte = (c.attachments || []).some((a) => a.isUpload && /.png$/i.test(a.name || ""));
+    if (temArte && !refazer) return total;
+    return total + f.paginas;
+  }, 0);
+  const estado = await lerEstado();
+  const plano = planoDoDia(paginasPendentes, estado);
+  let paginasHoje = 0;
+  console.log(
+    `ritmo: ${plano.permitido} pág. hoje (faltam ${paginasPendentes} em ${plano.diasRestantes} dia(s) até o dia ${DIA_ENTREGA}; ` +
+    `cota deixa ${plano.porCota}, ritmo pede ${plano.porRitmo}). Já usados hoje: ${estado.paginas} pág. ~${estado.tokens} tokens.`,
+  );
+  if (!dryRun && plano.permitido <= 0) {
+    console.log("Cota do dia esgotada. Rode de novo amanhã — os cards prontos são pulados.");
+    return;
+  }
 
   for (const card of cards) {
     const fmt = parseFormat(card.name);
@@ -108,10 +187,36 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false } =
       continue;
     }
 
+    // Para quando o ritmo do dia se esgota. Não é falha: o lote continua amanhã,
+    // e os cards já prontos são pulados automaticamente.
+    if (paginasHoje + fmt.paginas > plano.permitido) {
+      interrompido = `Ritmo do dia cumprido (${paginasHoje} de ${plano.permitido} página(s)). `
+        + `Faltam ${paginasPendentes - paginasHoje} página(s) para ${plano.diasRestantes} dia(s) até o dia ${DIA_ENTREGA}. `
+        + `Rode de novo amanhã — os cards prontos são pulados.`;
+      break;
+    }
     console.log("GERANDO:", card.name);
     const dir = await mkdtemp(join(tmpdir(), "abrev-art-"));
     try {
-      const { runId, files } = await produceArts(buildBriefing(card, fmt), dir);
+      // Limiar 2 de proposito: o titulo do card quase nao tem palavra que descreva
+      // imagem, entao uma palavra em comum e coincidencia, nao acerto. Servir imagem
+      // errada e pior que gerar uma nova.
+      // Camada 1: banco local. Se acharmos foto do tema, ela sobe como midia de apoio
+      // e a esteira usa em vez de gerar — mesma auditoria, sem custo de imagem.
+      // Camada 2 (dentro do cockpit): banco no R2 com os sujeitos ja pagos.
+      // Camada 3: geracao nova, que e a unica que custa.
+      const briefing = buildBriefing(card, fmt);
+      const visual = palavrasVisuais(card);
+      const consulta = visual || `${card.name} ${briefing.objetivo}`;
+      const achado = await buscarImagem(consulta, { minimo: visual ? 1 : 2 }).catch(() => null);
+      if (achado) {
+        briefing.midia = achado.arquivo;
+        console.log(`  banco: reaproveitando ${achado.meta.arquivo} (score ${achado.score}, por ${visual ? "palavras visuais" : "titulo"})`);
+      } else {
+        console.log(`  banco: nada no tema${visual ? "" : " (card sem [VISUAL])"}, a esteira vai gerar`);
+      }
+      const { runId, files } = await produceArts(briefing, dir);
+      if (achado) await registrarUso(achado.arquivo).catch(() => {});
       // Guarda do tema: confere a primeira arte do lote ANTES de anexar qualquer coisa.
       if (!temaConferido && files.length) {
         temaConferido = true;
@@ -136,6 +241,10 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false } =
       await trello(`/cards/${card.id}/actions/comments`, { text: `🎨 ${files.length} arte(s) no tema escuro geradas pela esteira do cockpit (run ${runId}).${removidas ? ` Versão anterior removida (${removidas}).` : ""}` }, "POST");
       console.log("  OK —", files.length, "arte(s) anexada(s)." + (removidas ? ` ${removidas} antiga(s) removida(s).` : ""));
       summary.push(`OK(${files.length}) ${card.name}`);
+      paginasHoje += fmt.paginas;
+      estado.paginas += fmt.paginas;
+      estado.tokens += fmt.paginas * TOKENS_POR_PAGINA;
+      await gravarEstado(estado);
     } catch (e) {
       // Crédito esgotado é terminal: insistir nos próximos cards só gera erro em série.
       if (/[Cc]rédito da API|credit_balance_exhausted|HTTP 429/.test(e.message)) {
