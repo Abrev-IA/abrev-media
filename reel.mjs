@@ -243,29 +243,33 @@ async function montarOverlay(spec, saida) {
   const destaque = spec.highlight ? ` <span class="hl">${esc(spec.highlight)}</span>` : "";
 
   const html = `<!doctype html><html lang="pt-br"><head><meta charset="utf-8">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=IBM+Plex+Sans:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap">
 <style>
-  :root{--teal:#36b7c6;--green:#8cc63f;--yellow:#f4c01e;--sky:#4bb6e8;--ink:#13293a}
+  /* Paleta OFICIAL do Kit de Identidade Visual da ABREV (Drive, rev. 23/09/2026).
+     Os valores antigos eram aproximacoes de olho e nenhum batia com o manual. */
+  :root{--navy:#1B2F3F;--green:#A0C342;--teal:#08A2A9;--sky:#32B9EA;--yellow:#FEC915;
+    --creme:#FEFBF5;--ink:#1B2F3F;
+    --petroleo:#1B2F3F}
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{background:transparent}
-  #reel{width:${LARGURA}px;height:${ALTURA}px;position:relative;overflow:hidden;color:#fff;
-    font-family:"IBM Plex Sans",system-ui,sans-serif}
+  #reel{width:${LARGURA}px;height:${ALTURA}px;position:relative;overflow:hidden;color:var(--creme);
+    font-family:"Montserrat",Gotham,Arial,sans-serif}
   /* escurece topo e base, que é onde fica o texto; o meio do footage continua limpo */
   .scrim{position:absolute;inset:0;background:
-    linear-gradient(180deg,rgba(14,29,41,.90) 0%,rgba(14,29,41,.84) 26%,
-    rgba(14,29,41,.12) 46%,rgba(14,29,41,.18) 58%,rgba(14,29,41,.80) 76%,
-    rgba(14,29,41,.96) 100%)}
+    linear-gradient(180deg,rgba(16,29,39,.90) 0%,rgba(16,29,39,.84) 26%,
+    rgba(16,29,39,.12) 46%,rgba(16,29,39,.18) 58%,rgba(16,29,39,.80) 76%,
+    rgba(16,29,39,.96) 100%)}
   #topbar{position:absolute;top:0;left:0;right:0;height:14px;
     background:linear-gradient(90deg,var(--green),var(--teal) 38%,var(--sky) 66%,var(--yellow))}
   .pad{position:absolute;inset:0;padding:120px 84px 150px;display:flex;flex-direction:column}
   .head{display:flex;align-items:center;gap:20px}
   .head img{width:104px;height:104px;object-fit:contain;background:rgba(15,34,52,.82);
     border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:11px}
-  .head .tag{font-weight:700;letter-spacing:.14em;font-size:28px;color:var(--teal);text-transform:uppercase;line-height:1.2;white-space:nowrap}
+  .head .tag{font-weight:700;letter-spacing:.14em;font-size:28px;color:var(--creme);text-transform:uppercase;line-height:1.2;white-space:nowrap}
   .pill{align-self:flex-start;margin-top:64px;background:var(--yellow);color:var(--ink);
-    font-family:"Archivo";font-weight:800;font-size:27px;letter-spacing:.03em;text-transform:uppercase;
+    font-family:"Montserrat";font-weight:800;font-size:27px;letter-spacing:.03em;text-transform:uppercase;
     padding:16px 28px;border-radius:14px}
-  h1{font-family:"Archivo";font-weight:800;font-size:86px;line-height:1.05;margin-top:36px;
+  h1{font-family:"Montserrat";font-weight:800;font-size:86px;line-height:1.05;margin-top:36px;
     letter-spacing:-.01em;max-width:15ch;text-shadow:0 4px 28px rgba(0,0,0,.45)}
   h1 .hl{color:var(--yellow)}
   /* sub e rodapé viajam juntos para a base. Com o margin-top:auto solto no .sub, a peça
