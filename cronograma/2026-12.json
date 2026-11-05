@@ -1,0 +1,87 @@
+{
+  "mes": 12,
+  "ano": 2026,
+  "pecas": [
+    {
+      "dia": 1,
+      "formato": "Carrossel",
+      "gancho": null,
+      "tema": "Dezembro vende e devolve ao mesmo tempo",
+      "legenda": "Dezembro é o mês de maior volume de vendas do varejo brasileiro. E é também o mês em que a logística reversa deixa de ser assunto de bastidor.\n\nCada pico de venda carrega um pico de retorno — troca, arrependimento, defeito, endereço errado. A diferença entre as operações que atravessam dezembro inteiras e as que travam na virada não está na frente de loja: está no caminho de volta, planejado antes de o volume chegar.\n\nA ABREV abre o mês com uma série sobre isso.\n\n#ABREV #LogísticaReversa #Varejo #PósVenda",
+      "visual": "caixa, esteira, galpão, etiqueta",
+      "stories": "Dezembro vende e devolve ao mesmo tempo. A série começa hoje."
+    },
+    {
+      "dia": 3,
+      "formato": "Reel",
+      "gancho": null,
+      "tema": "O prazo de troca começa na venda",
+      "legenda": "O consumidor que compra em dezembro já sabe o que vai fazer se o produto não servir. O varejo é que às vezes descobre depois.\n\nPrazo de arrependimento, política de troca, canal de atendimento, rótulo de devolução: tudo isso é decidido antes da venda, não quando o pedido volta. Quando a regra é clara na compra, o retorno vira processo. Quando não é, vira atrito — e atrito em dezembro custa reputação na hora de maior exposição.\n\n#ABREV #LogísticaReversa #PósVenda #ExperiênciaDoCliente",
+      "visual": "etiqueta, caixa aberta, balcão, celular",
+      "stories": "A política de troca é decidida na venda, não na devolução."
+    },
+    {
+      "dia": 8,
+      "formato": "Carrossel",
+      "gancho": null,
+      "tema": "O estoque que volta também é estoque",
+      "legenda": "Produto devolvido não é perda automática. É estoque — com localização, estado e destino.\n\nO que decide se ele volta a vender é o tempo que leva para ser triado. Parado num canto do centro de distribuição, perde janela comercial e vira prejuízo. Triado rápido, volta para a prateleira, para o outlet ou para o reparo ainda dentro da estação.\n\nA reversa é, no fim, uma decisão de giro.\n\n#ABREV #LogísticaReversa #Estoque #Varejo",
+      "visual": "prateleira, caixa, galpão, triagem",
+      "stories": "Produto devolvido é estoque, não perda. Depende da triagem."
+    },
+    {
+      "dia": 10,
+      "formato": "Reel",
+      "gancho": null,
+      "tema": "A embalagem decide a viagem de volta",
+      "legenda": "Quase toda devolução começa com uma pergunta prática: em que o cliente vai pôr o produto para mandar de volta?\n\nEmbalagem que não reabre, rótulo que não acompanha, instrução que não existe. O resultado é produto que chega avariado no retorno e não pode mais ser revendido — uma perda criada no caminho de volta, não na venda.\n\nPensar a embalagem nos dois sentidos é o detalhe mais barato da reversa.\n\n#ABREV #LogísticaReversa #Embalagem #Varejo",
+      "visual": "caixa, fita, rótulo, mesa",
+      "stories": "A embalagem da ida decide se o produto volta vendável."
+    },
+    {
+      "dia": 11,
+      "formato": "Newsletter",
+      "gancho": null,
+      "tema": "Reversa no pico: o que dezembro ensina",
+      "legenda": "A edição de dezembro da newsletter da ABREV trata do único mês em que venda e devolução crescem juntas.\n\nDentro: o que muda na operação quando o volume dobra, por que a triagem é o gargalo que aparece primeiro, e como o planejamento da virada se faz agora — não depois, quando a onda de trocas de Natal já está no balcão.\n\nPara associados e para quem acompanha o setor.\n\n#ABREV #LogísticaReversa #Newsletter #Varejo",
+      "visual": "mesa, relatório, caixa, galpão",
+      "stories": "A newsletter de dezembro saiu: reversa no pico."
+    },
+    {
+      "dia": 15,
+      "formato": "Carrossel",
+      "gancho": null,
+      "tema": "Os últimos dias de prazo são os mais caros",
+      "legenda": "Na reta final de dezembro, o erro muda de preço. Pedido que atrasa não tem mais janela para ser corrigido antes da data, e o que era um reenvio passa a ser um cancelamento.\n\nÉ aí que a reversa deixa de ser operação e vira atendimento: receber de volta rápido, informar o cliente, devolver o valor sem fila. A operação que separa esse fluxo do fluxo normal de entrega chega na virada com menos passivo.\n\n#ABREV #LogísticaReversa #PósVenda #Varejo",
+      "visual": "calendário, caixa, balcão, caminhão",
+      "stories": "Na reta final, devolução é atendimento — não só operação."
+    },
+    {
+      "dia": 17,
+      "formato": "Reel",
+      "gancho": null,
+      "tema": "O pós-venda que o cliente lembra",
+      "legenda": "Ninguém escolhe uma loja pela devolução. Mas quase todo mundo deixa de voltar por causa de uma.\n\nA devolução é o único momento em que o cliente já pagou, já se frustrou e ainda está olhando. Resolver bem ali é mais barato que reconquistar depois — e é o que diferencia marca de catálogo.\n\nNo varejo brasileiro, a taxa média de devolução é de 12% no e-commerce e 3,6% na loja física. É muita gente na porta de saída.\n\n#ABREV #LogísticaReversa #PósVenda #Fidelização",
+      "visual": "balcão, caixa, atendente, sacola",
+      "stories": "12% no e-commerce, 3,6% na loja física. É muita gente na saída."
+    },
+    {
+      "dia": 22,
+      "formato": "Carrossel",
+      "gancho": "Natal",
+      "tema": "Depois do presente vem a troca",
+      "legenda": "O Natal é a data que mais gera troca no varejo brasileiro — e a maioria delas não tem nada de errado com o produto. É tamanho, é cor, é gosto.\n\nIsso muda a operação: não é defeito a ser consertado, é item em bom estado que precisa voltar a vender rápido. Quem separa esses dois fluxos recupera valor; quem trata tudo como avaria transforma estoque bom em perda.\n\nA semana que vem é a do balcão cheio.\n\n#ABREV #Natal #LogísticaReversa #Varejo",
+      "visual": "presente, caixa, balcão, sacola",
+      "stories": "Troca de Natal não é defeito: é item bom que precisa voltar a vender."
+    },
+    {
+      "dia": 29,
+      "formato": "Carrossel",
+      "gancho": "início das trocas de Natal",
+      "tema": "A onda de trocas começou",
+      "legenda": "A semana entre o Natal e a virada é quando o caminho de volta enche. Loja física recebe no balcão, e-commerce recebe pelo correio, e os dois precisam dar a mesma resposta.\n\nO custo da logística reversa no e-commerce brasileiro é de cerca de R$ 59 bilhões por ano. Boa parte dele se decide em semanas como esta — na velocidade da triagem, na clareza da política e no destino que o produto recebe.\n\nQue 2026 feche com o caminho de volta no lugar.\n\n#ABREV #LogísticaReversa #Varejo #PósVenda",
+      "visual": "balcão, fila, caixa, sacola",
+      "stories": "A onda de trocas começou. A resposta tem que ser a mesma nos dois canais."
+    }
+  ]
+}
