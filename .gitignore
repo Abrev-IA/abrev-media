@@ -1,0 +1,9 @@
+node_modules/
+
+# package-lock.json fica de fora DE PROPOSITO, apesar de fixar versao ser bom para um
+# cron desatendido. O lockfile gerado no Windows pode omitir dependencia opcional que
+# so existe no Linux, e os runners sao Ubuntu. O `npm install` do CI roda sozinho antes
+# da rotina de artes do dia 15: um install quebrado ali custa o mes inteiro de artes.
+# Para adotar o lockfile, gerar num Linux (ou no proprio runner) e conferir o install
+# la antes de commitar.
+package-lock.json
