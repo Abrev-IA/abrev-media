@@ -354,6 +354,22 @@ async function run({ dryRun, refazer, modelo, mes, ano }) {
     throw new Error(`a pauta não cobre ${faltando.map((s) => dd(s.dia)).join(", ")} — nada foi criado.`);
   }
 
+  // Campo vazio é pior que pauta ausente. Um tema em branco monta o título
+  // "01/12 · Carrossel · ", que a regex do aprovacao.mjs NÃO casa — o cartão existiria no
+  // quadro e ficaria invisível para o e-mail do dia 20, que é o pior resultado possível:
+  // falha silenciosa num passo que ninguém revisita. É exatamente o estado do esqueleto
+  // que --modelo escreve e ninguém preencheu.
+  const vazios = ["tema", "legenda", "visual", "stories"];
+  const incompletos = slots
+    .map((s) => ({ s, falta: vazios.filter((c) => !String(porDia.get(s.dia)[c] || "").trim()) }))
+    .filter((x) => x.falta.length);
+  if (incompletos.length) {
+    throw new Error(
+      "pauta incompleta — nada foi criado:\n" +
+      incompletos.map((x) => `  ${dd(x.s.dia)}/${dd(mes)} sem ${x.falta.join(", ")}`).join("\n"),
+    );
+  }
+
   const hoje = new Date().toLocaleDateString("pt-BR");
   const avisos = [];
   let criados = 0;
