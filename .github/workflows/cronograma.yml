@@ -1,0 +1,47 @@
+name: Montar cronograma do mês seguinte (dia 12)
+
+# PASSO 00 do ciclo, e o que faltava para o mês seguinte começar sozinho: cria na lista
+# "Rascunho" os cartões da pauta do próximo mês, para a rotina de artes (dia 15) achar o
+# que gerar e o e-mail de aprovação (dia 20) ter o que mandar para a diretoria.
+#
+# Roda no dia 12 de propósito: dá três dias de folga antes da rotina de artes. Se este
+# disparo falhar, ainda há tempo de rodar na mão sem atrasar o ciclo.
+#
+# Sem ANTHROPIC_API_KEY o script não inventa nada: ele procura o arquivo
+# cronograma/<ano>-<mes>.json e falha avisando se não existir. Nenhum cartão é criado
+# com data (`due`) — quem agenda é a etapa de aprovação, movendo o cartão para
+# "Agendado". Por isso este workflow não publica nada, nem por acidente.
+on:
+  schedule:
+    - cron: "0 12 12 * *"   # todo dia 12, 12:00 UTC (~9h BRT)
+  workflow_dispatch:
+    inputs:
+      previa:
+        description: "Só mostrar o plano, sem criar cartão"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cronograma-abrev
+  cancel-in-progress: false
+
+jobs:
+  cronograma:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Instalar dependências
+        run: npm install --no-audit --no-fund
+      - name: Montar a pauta do mês seguinte
+        run: node cronograma.mjs ${{ (github.event_name == 'workflow_dispatch' && inputs.previa) && '--dry-run' || '' }}
+        env:
+          TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
+          TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
