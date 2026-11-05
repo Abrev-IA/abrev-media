@@ -1,10 +1,24 @@
 name: Publicar Instagram (calendário ABREV)
 
 # Lê o quadro "Calendário ABREV" no Trello e publica os cards de "Agendado"
-# cujo horário já venceu. Roda a cada 15 min; também dá para rodar na mão.
+# cujo horário já venceu.
+#
+# O GATILHO PRINCIPAL NÃO É MAIS O CRON DAQUI. Medido em 05/11/2026: o `*/15` abaixo
+# declara 96 execuções por dia e o GitHub entrega 3 a 5, com buracos de 4 a 8 horas.
+# Um card com `due` às 19:00 saía de madrugada. Quem marca a hora agora é o Worker em
+# `relogio/`, que dispara este workflow por repository_dispatch nos horários exatos.
 on:
+  # Gatilho principal: o relógio (relogio/). Evento de dispatch não é descartado como
+  # o agendado — a execução começa em segundos.
+  repository_dispatch:
+    types: [publicar]
+
+  # Rede de segurança, para o caso de o Worker cair ou a conta da Cloudflare sumir.
+  # Mantido justamente por ser irregular: como gatilho principal não serve, como rede
+  # serve bem — 3 a 5 passadas por dia pegam qualquer card que tenha ficado para trás.
   schedule:
-    - cron: "*/15 * * * *"   # a cada 15 minutos (horário UTC)
+    - cron: "*/15 * * * *"
+
   workflow_dispatch: {}       # botão "Run workflow" para teste manual
 
 permissions:

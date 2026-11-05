@@ -1,0 +1,26 @@
+name = "abrev-relogio"
+main = "worker.mjs"
+compatibility_date = "2026-01-01"
+
+# Os três primeiros são os horários de publicação, em UTC (Brasília é UTC-3 o ano
+# inteiro desde 2019, quando acabou o horário de verão). O quarto é a varredura de
+# recuperação: roda nas HORAS CHEIAS RESTANTES e pega qualquer card que tenha vencido
+# sem sair — se um disparo falhar, o atraso máximo é de uma hora em vez de um dia.
+#
+# A lista de horas da varredura pula 12, 16 e 22 de propósito, para não disparar duas
+# vezes no mesmo minuto. Se mudar um horário acima, mudar a lista abaixo junto.
+#
+# Custo: 27 invocações por dia. O plano gratuito da Cloudflare dá 100 mil por dia.
+[triggers]
+crons = [
+  "0 12 * * *",                    # 09:00 BRT — janela do LinkedIn
+  "0 16 * * *",                    # 13:00 BRT — janela da newsletter
+  "0 22 * * *",                    # 19:00 BRT — janela do Instagram
+  "0 0-11,13-15,17-21,23 * * *",   # varredura de recuperação
+]
+
+[vars]
+REPO = "Abrev-IA/abrev-media"
+
+# GITHUB_TOKEN não vai aqui. É segredo:
+#   npx wrangler secret put GITHUB_TOKEN
