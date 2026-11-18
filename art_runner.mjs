@@ -60,7 +60,10 @@ const COMPOSITION_HINT =
 const REFERENCE_HINT =
   " IMAGEM ANEXADA: a foto enviada como midia de apoio e o conteudo grafico desta peca." +
   " Use graphicMode 'reference' e preserve essa fotografia; NAO gere imagem nova." +
-  " Componha o texto ao redor dela e escolha o tema de fundo que melhor a valoriza.";
+  " Componha o texto ao redor dela e escolha o tema de fundo que melhor a valoriza." +
+  " PROIBIDO graphicMode 'generated' nesta peca: a ABREV nao usa imagem criada por IA." +
+  " Se a foto nao servir ao texto, use graphicMode 'none' e faca a peca tipografica —" +
+  " nunca invente uma imagem.";
 
 function toPayload(b) {
   const payload = {
