@@ -318,7 +318,15 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false, re
         briefing.midia = achado.arquivo;
         if (!achado.padrao) console.log(`  banco: reaproveitando ${achado.meta.arquivo} (score ${achado.score}, por ${visual ? "palavras visuais" : "titulo"})`);
       } else {
-        console.log(`  banco: nada no tema e sem padrão institucional${visual ? "" : " (card sem [VISUAL])"}, a esteira vai gerar`);
+        console.log(`  banco: nada no tema e sem padrão institucional${visual ? "" : " (card sem [VISUAL])"}`);
+      }
+      // Trava: sem foto, a esteira não é acionada. Mandar o briefing sem mídia é pedir
+      // para a IA desenhar, e é daí que vinham as ilustrações. Melhor o card ficar sem
+      // arte, visível no resumo, do que voltar um cartoon para o feed.
+      if (!achado) {
+        console.log("  PULANDO: sem foto para esta peça — a esteira não é acionada sem mídia.");
+        summary.push(`SEM FOTO ${card.name}`);
+        continue;
       }
       const { runId, files } = await produceArts(briefing, dir);
       if (achado) await bco.registrarUso(achado.arquivo).catch(() => {});
