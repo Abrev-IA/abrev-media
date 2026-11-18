@@ -306,12 +306,19 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false, re
       const visual = palavrasVisuais(card);
       const consulta = visual || `${card.name} ${briefing.objetivo}`;
       const bco = await banco();
-      const achado = bco ? await bco.buscarImagem(consulta, { minimo: visual ? 1 : 2 }).catch(() => null) : null;
+      let achado = bco ? await bco.buscarImagem(consulta, { minimo: visual ? 1 : 2 }).catch(() => null) : null;
+      // Não achando nada do tema, entra a foto institucional em vez de mandar a esteira
+      // inventar. Gerar era a origem dos desenhos: a IA devolvia ilustração, a ilustração
+      // ia para o banco e voltava nas peças seguintes.
+      if (!achado && bco) {
+        achado = await bco.imagemPadrao().catch(() => null);
+        if (achado) console.log(`  banco: nada no tema — usando o padrão institucional (${achado.meta.arquivo})`);
+      }
       if (achado) {
         briefing.midia = achado.arquivo;
-        console.log(`  banco: reaproveitando ${achado.meta.arquivo} (score ${achado.score}, por ${visual ? "palavras visuais" : "titulo"})`);
+        if (!achado.padrao) console.log(`  banco: reaproveitando ${achado.meta.arquivo} (score ${achado.score}, por ${visual ? "palavras visuais" : "titulo"})`);
       } else {
-        console.log(`  banco: nada no tema${visual ? "" : " (card sem [VISUAL])"}, a esteira vai gerar`);
+        console.log(`  banco: nada no tema e sem padrão institucional${visual ? "" : " (card sem [VISUAL])"}, a esteira vai gerar`);
       }
       const { runId, files } = await produceArts(briefing, dir);
       if (achado) await bco.registrarUso(achado.arquivo).catch(() => {});
