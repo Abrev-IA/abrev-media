@@ -82,7 +82,7 @@ function buildBriefing(card, fmt) {
     objetivo: `${tema}. ${caption}`.slice(0, 650),
     canais: ["Instagram", "LinkedIn"],
     formatos: fmt.formatos,
-    fonte: "Posicionamento institucional da ABREV sobre logística reversa no varejo; custo setorial ~R$ 59 bi (cobertura Estadão/Brasil Inovador, set/2026). Só dados públicos; não inventar estatísticas/datas. Tom executivo B2B, editorial e cativante. Logo oficial ABREV. ARTE NO TEMA ESCURO: usar theme dark (fundo azul petróleo da identidade, texto claro, bloco de informações escuro). Não usar fundo branco.",
+    fonte: "Posicionamento institucional da ABREV sobre logística reversa no varejo; custo setorial ~R$ 59 bi (cobertura Estadão/Brasil Inovador, set/2026). Só dados públicos; não inventar estatísticas/datas. Tom executivo B2B, editorial e cativante. Logo oficial ABREV. ARTE NO TEMA ESCURO: usar theme dark (fundo azul petróleo da identidade, texto claro, bloco de informações escuro). Não usar fundo branco. IMAGEM SEMPRE FOTOGRÁFICA: foto real de operação, produto ou pessoas. NUNCA ilustração, desenho, cartoon, vetor, 3D renderizado ou arte conceitual. Havendo mídia de apoio anexada, usar essa foto em vez de criar imagem nova.",
     dimensoes: "1024x1024",
     paginas: fmt.paginas,
   };
