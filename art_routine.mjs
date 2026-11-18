@@ -82,7 +82,7 @@ function buildBriefing(card, fmt) {
     objetivo: `${tema}. ${caption}`.slice(0, 650),
     canais: ["Instagram", "LinkedIn"],
     formatos: fmt.formatos,
-    fonte: "Posicionamento institucional da ABREV sobre logística reversa no varejo; custo setorial ~R$ 59 bi (cobertura Estadão/Brasil Inovador, set/2026). Só dados públicos; não inventar estatísticas/datas. Tom executivo B2B, editorial e cativante. Logo oficial ABREV. ARTE NO TEMA ESCURO: usar theme dark (fundo azul petróleo da identidade, texto claro, bloco de informações escuro). Não usar fundo branco. IMAGEM SEMPRE FOTOGRÁFICA: foto real de operação, produto ou pessoas. NUNCA ilustração, desenho, cartoon, vetor, 3D renderizado ou arte conceitual. Havendo mídia de apoio anexada, usar essa foto em vez de criar imagem nova.",
+    fonte: "Posicionamento institucional da ABREV sobre logística reversa no varejo; custo setorial ~R$ 59 bi (cobertura Estadão/Brasil Inovador, set/2026). Só dados públicos; não inventar estatísticas/datas. Tom executivo B2B, editorial e cativante. Logo oficial ABREV. ARTE NO TEMA ESCURO: usar theme dark (fundo azul petróleo da identidade, texto claro, bloco de informações escuro). Não usar fundo branco. IMAGEM SEMPRE FOTORREALISTA: fotografia ou imagem indistinguível de fotografia — cena real de operação, produto ou pessoas. NUNCA cartoon, desenho, ilustração, vetor, flat design ou 3D estilizado. Havendo mídia de apoio anexada, usar essa foto em vez de criar imagem nova.",
     dimensoes: "1024x1024",
     paginas: fmt.paginas,
   };
@@ -320,14 +320,10 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false, re
       } else {
         console.log(`  banco: nada no tema e sem padrão institucional${visual ? "" : " (card sem [VISUAL])"}`);
       }
-      // Trava: sem foto, a esteira não é acionada. Mandar o briefing sem mídia é pedir
-      // para a IA desenhar, e é daí que vinham as ilustrações. Melhor o card ficar sem
-      // arte, visível no resumo, do que voltar um cartoon para o feed.
-      if (!achado) {
-        console.log("  PULANDO: sem foto para esta peça — a esteira não é acionada sem mídia.");
-        summary.push(`SEM FOTO ${card.name}`);
-        continue;
-      }
+      // Sem foto a esteira ainda roda — a regra é realismo, não proibição de gerar —,
+      // mas gerar custa crédito e reaproveitar não. Avisa para o caso ficar visível no
+      // resumo, já que hoje todo card recebe foto e cair aqui indica banco desatualizado.
+      if (!achado) console.log("  ATENÇÃO: sem foto no banco — a esteira vai gerar, com custo.");
       const { runId, files } = await produceArts(briefing, dir);
       if (achado) await bco.registrarUso(achado.arquivo).catch(() => {});
       // Guarda do tema: confere a primeira arte do lote ANTES de anexar qualquer coisa.
