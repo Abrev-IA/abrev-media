@@ -60,14 +60,21 @@ const COMPOSITION_HINT =
 const REFERENCE_HINT =
   " IMAGEM ANEXADA: a foto enviada como midia de apoio e o conteudo grafico desta peca." +
   " Use graphicMode 'reference' e preserve essa fotografia; NAO gere imagem nova." +
-  " Componha o texto ao redor dela e escolha o tema de fundo que melhor a valoriza." +
-  " PROIBIDO graphicMode 'generated' nesta peca: a ABREV nao usa imagem criada por IA." +
-  " Se a foto nao servir ao texto, use graphicMode 'none' e faca a peca tipografica —" +
-  " nunca invente uma imagem.";
+  " Componha o texto ao redor dela e escolha o tema de fundo que melhor a valoriza.";
+
+// A regra da ABREV nao e contra imagem gerada: e contra imagem que nao parece real.
+// Render fotorrealista passa; cartoon, vetor e ilustracao nao. Vale tanto para o que a
+// esteira gerar quanto para o que ela reaproveitar.
+const REALISMO_HINT =
+  " REALISMO OBRIGATORIO: a imagem desta peca deve ser fotografica ou indistinguivel de" +
+  " uma fotografia — cena real de operacao, produto ou pessoas, com luz e textura criveis." +
+  " PROIBIDO cartoon, desenho, ilustracao, vetor, flat design, arte conceitual e 3D" +
+  " estilizado. Na duvida entre ilustrar e nao ter imagem, use graphicMode 'none' e faca" +
+  " a peca tipografica.";
 
 function toPayload(b) {
   const payload = {
-    0: (b.objetivo || "") + COMPOSITION_HINT + (b.midia ? REFERENCE_HINT : ""),
+    0: (b.objetivo || "") + COMPOSITION_HINT + REALISMO_HINT + (b.midia ? REFERENCE_HINT : ""),
     1: (b.canais || ["Instagram", "LinkedIn"]).join("\n"),
     2: (b.formatos || ["Carrossel"]).join("\n"),
     3: (b.fonte || "") + COMPOSITION_HINT,
