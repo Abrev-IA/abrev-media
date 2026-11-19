@@ -210,9 +210,11 @@ function planoDoDia(paginasRestantes, estado) {
   return { permitido: Math.min(porRitmo, porCota), porRitmo, porCota, diasRestantes, hoje };
 }
 
-async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false, refazerReels = false } = {}) {
+async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false, refazerReels = false, local = false } = {}) {
   // Footage já usado nesta rodada, para dois reels do mesmo mês não saírem com o mesmo plano.
   const footageUsado = [];
+  // Mesma ideia para as fotos das artes.
+  const fotosUsadas = [];
   const cards = await trello(`/lists/${listId}/cards`, { fields: "name,desc", attachments: "true", attachment_fields: "name,isUpload" });
   console.log(`${cards.length} card(s) em Rascunho.${dryRun ? "  [DRY-RUN: nada é gerado, nenhum crédito gasto]" : ""}${refazer ? "  [REFAZER: substitui a arte existente]" : ""}`);
   const summary = [];
@@ -242,7 +244,8 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false, re
     `cota deixa ${plano.porCota}, ritmo pede ${plano.porRitmo}). Já usados hoje: ${estado.paginas} pág. ~${estado.tokens} tokens.`,
   );
   if (reelsPendentes) console.log(`${reelsPendentes} reel(s) ${refazerReels ? "para refazer o vídeo" : "sem vídeo"} — esses saem fora da cota, porque não passam pela esteira.`);
-  if (!dryRun && plano.permitido <= 0 && !reelsPendentes) {
+  if (local) console.log('[LOCAL] compondo aqui, sem a esteira: sem custo de API e sem cota.');
+  if (!dryRun && plano.permitido <= 0 && !reelsPendentes && !local) {
     // Permitido zero tem duas causas opostas, e confundir as duas assusta à toa: ou não
     // sobrou cota hoje, ou simplesmente não há mais nada para fazer.
     console.log(paginasPendentes === 0
@@ -286,7 +289,7 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false, re
 
     // Para quando o ritmo do dia se esgota. Não é falha: o lote continua amanhã,
     // e os cards já prontos são pulados automaticamente.
-    if (paginasHoje + fmt.paginas > plano.permitido) {
+    if (!local && paginasHoje + fmt.paginas > plano.permitido) {
       interrompido = `Ritmo do dia cumprido (${paginasHoje} de ${plano.permitido} página(s)). `
         + `Faltam ${paginasPendentes - paginasHoje} página(s) para ${plano.diasRestantes} dia(s) até o dia ${DIA_ENTREGA}. `
         + `Rode de novo amanhã — os cards prontos são pulados.`;
@@ -306,14 +309,20 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false, re
       const visual = palavrasVisuais(card);
       const consulta = visual || `${card.name} ${briefing.objetivo}`;
       const bco = await banco();
-      let achado = bco ? await bco.buscarImagem(consulta, { minimo: visual ? 1 : 2 }).catch(() => null) : null;
-      // Não achando nada do tema, entra a foto institucional em vez de mandar a esteira
-      // inventar. Gerar era a origem dos desenhos: a IA devolvia ilustração, a ilustração
-      // ia para o banco e voltava nas peças seguintes.
+      // excluir o que já saiu nesta rodada: sem isso a foto de maior pontuação ganha
+      // sempre, porque o score domina o desempate por uso, e o mês inteiro sai com a
+      // mesma imagem — medido: 36 cards receberiam 3 fotos distintas.
+      let achado = bco ? await bco.buscarImagem(consulta, { minimo: visual ? 1 : 2, excluir: fotosUsadas }).catch(() => null) : null;
+      // Esgotadas as inéditas, repete a melhor em vez de ficar sem foto: repetir é ruim,
+      // não ter imagem é pior.
+      if (!achado && bco) achado = await bco.buscarImagem(consulta, { minimo: visual ? 1 : 2 }).catch(() => null);
+      // Nada no tema: entra a institucional, também sem repetir dentro da rodada.
       if (!achado && bco) {
-        achado = await bco.imagemPadrao().catch(() => null);
+        achado = await bco.imagemPadrao({ excluir: fotosUsadas }).catch(() => null)
+          || await bco.imagemPadrao().catch(() => null);
         if (achado) console.log(`  banco: nada no tema — usando o padrão institucional (${achado.meta.arquivo})`);
       }
+      if (achado) fotosUsadas.push(achado.meta.arquivo);
       if (achado) {
         briefing.midia = achado.arquivo;
         if (!achado.padrao) console.log(`  banco: reaproveitando ${achado.meta.arquivo} (score ${achado.score}, por ${visual ? "palavras visuais" : "titulo"})`);
@@ -324,7 +333,23 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false, re
       // mas gerar custa crédito e reaproveitar não. Avisa para o caso ficar visível no
       // resumo, já que hoje todo card recebe foto e cair aqui indica banco desatualizado.
       if (!achado) console.log("  ATENÇÃO: sem foto no banco — a esteira vai gerar, com custo.");
-      const { runId, files } = await produceArts(briefing, dir);
+      let runId, files;
+      if (local) {
+        // Compõe aqui com o texto do card e a foto do banco. Sem esteira, sem crédito,
+        // e o tema escuro é garantido pelo compositor — por isso a guarda de tema abaixo
+        // não precisa rodar neste caminho.
+        const mod = await import("./arte_local.mjs");
+        const saidas = await mod.renderizarCard(card, {
+          formato: /stories/i.test(card.name) ? "story" : "post",
+          paginas: fmt.paginas,
+          foto: achado?.arquivo || null,
+        }, dir);
+        files = saidas.map((file) => ({ file }));
+        runId = "local";
+        temaConferido = true;
+      } else {
+        ({ runId, files } = await produceArts(briefing, dir));
+      }
       if (achado) await bco.registrarUso(achado.arquivo).catch(() => {});
       // Guarda do tema: confere a primeira arte do lote ANTES de anexar qualquer coisa.
       if (!temaConferido && files.length) {
@@ -355,7 +380,7 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false, re
         return null;
       }) : null;
 
-      await trello(`/cards/${card.id}/actions/comments`, { text: `🎨 ${files.length} arte(s) no tema escuro geradas pela esteira do cockpit (run ${runId}).${reel ? ` 🎬 Reel de ${reel.duracao}s montado com footage de ${reel.origem}.` : ""}${removidas ? ` Versão anterior removida (${removidas}).` : ""}` }, "POST");
+      await trello(`/cards/${card.id}/actions/comments`, { text: `🎨 ${files.length} arte(s) no tema escuro ${local ? "compostas localmente (sem custo de API)" : `geradas pela esteira do cockpit (run ${runId})`}.${reel ? ` 🎬 Reel de ${reel.duracao}s montado com footage de ${reel.origem}.` : ""}${removidas ? ` Versão anterior removida (${removidas}).` : ""}` }, "POST");
       console.log("  OK —", files.length, "arte(s) anexada(s)." + (reel ? " + reel." : "") + (removidas ? ` ${removidas} antiga(s) removida(s).` : ""));
       summary.push(`OK(${files.length}) ${card.name}`);
       paginasHoje += fmt.paginas;
@@ -391,4 +416,6 @@ run(args.find((a) => !a.startsWith("--")), {
   refazer: args.includes("--refazer"),
   // --refazer-reels: troca só o vídeo dos reels, sem passar pela esteira nem gastar crédito.
   refazerReels: args.includes("--refazer-reels"),
+  // --local: compõe as artes aqui (compositor + banco) em vez de acionar a esteira.
+  local: args.includes("--local"),
 }).catch((e) => { console.error("FATAL:", e.message); process.exit(1); });
