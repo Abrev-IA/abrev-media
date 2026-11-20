@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Publicação no Instagram (@abrev_org) via Graph API — 2 passos: container → publish.
-// Suporta imagem única, carrossel (imagens/vídeos) e reel.
+// Suporta imagem única, carrossel (imagens/vídeos), reel e story.
 //
 // Env (via `node --env-file=.env`):
 //   IG_ACCESS_TOKEN   token com escopo instagram_business_content_publish
@@ -13,11 +13,12 @@
 // CLI (publica de verdade, sem --dry-run):
 //   node --env-file=.env ig_publish.mjs image  <imageUrl> "<legenda>" [--dry-run]
 //   node --env-file=.env ig_publish.mjs reel   <videoUrl> "<legenda>" [--dry-run]
+//   node --env-file=.env ig_publish.mjs story  <imageUrl|videoUrl> [--dry-run]   (story não tem legenda)
 //   node --env-file=.env ig_publish.mjs carousel "<legenda>" <url1> <url2> ... [--dry-run]
 //        (cada url é imagem por extensão .jpg/.png/.webp; vídeo por .mp4/.mov)
 //
 // Import:
-//   import { publishImage, publishReel, publishCarousel } from "./ig_publish.mjs";
+//   import { publishImage, publishReel, publishStory, publishCarousel } from "./ig_publish.mjs";
 
 import { pathToFileURL } from "node:url";
 
@@ -98,6 +99,26 @@ export async function publishReel({ videoUrl, caption = "", coverUrl, shareToFee
   return publishContainer(creationId);
 }
 
+// ---- Story ----
+// O agendamento de story do Business Suite nunca funcionou nesta conta: 8 tentativas
+// em 10/11, 12/11, 17/11 e 19/11, todas "Failed to publish", com a mídia correta
+// (1080x1920). O caminho da API funciona — container STORIES testado em 20/11/2026,
+// status FINISHED. Então a story sai por aqui, e não pelo Business Suite.
+//
+// Story não aceita legenda: o texto vive dentro da arte. Qualquer caption é ignorada
+// pela API, então nem mandamos — o desc do card de story é briefing interno e não
+// pode vazar para a conta de jeito nenhum.
+export async function publishStory({ imageUrl, videoUrl }) {
+  const url = imageUrl || videoUrl;
+  if (!url) throw new Error("publishStory precisa de imageUrl ou videoUrl");
+  const params = isVideo(url)
+    ? { media_type: "STORIES", video_url: url }
+    : { media_type: "STORIES", image_url: url };
+  const creationId = await createContainer(params);
+  await waitFinished(creationId);
+  return publishContainer(creationId);
+}
+
 // ---- Carrossel (2 a 10 itens, imagens e/ou vídeos) ----
 export async function publishCarousel({ items, caption = "" }) {
   if (!Array.isArray(items) || items.length < 2 || items.length > 10) {
@@ -142,6 +163,16 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       await waitFinished(id);
       if (dry) return console.log("DRY-RUN: reel pronto, NÃO publicado. creation_id=" + id);
       console.log("publicado media_id=" + (await publishContainer(id)));
+    } else if (cmd === "story") {
+      const [mediaUrl] = params;
+      if (!mediaUrl) throw new Error("uso: story <imageUrl|videoUrl> [--dry-run]");
+      const p = isVideo(mediaUrl)
+        ? { media_type: "STORIES", video_url: mediaUrl }
+        : { media_type: "STORIES", image_url: mediaUrl };
+      const id = await createContainer(p);
+      await waitFinished(id);
+      if (dry) return console.log("DRY-RUN: story pronta, NÃO publicada. creation_id=" + id);
+      console.log("publicado media_id=" + (await publishContainer(id)));
     } else if (cmd === "carousel") {
       const [caption = "", ...urls] = params;
       if (urls.length < 2) throw new Error("uso: carousel \"<legenda>\" <url1> <url2> ... [--dry-run]");
@@ -158,7 +189,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       }
       console.log("publicado media_id=" + (await publishCarousel({ items: urls, caption })));
     } else {
-      throw new Error("comando: image | reel | carousel");
+      throw new Error("comando: image | reel | story | carousel");
     }
   }
 
