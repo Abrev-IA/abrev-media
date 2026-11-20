@@ -2,11 +2,16 @@
   {
     "arquivo": "ov-3349658e-d628-4b10-8f41-3d1fba1850b5.jpg",
     "tags": [
-      "estoque",
-      "armazem",
-      "prateleira",
-      "deposito",
-      "corredor"
+      "alimento",
+      "alimentos",
+      "cesta basica",
+      "doacao de alimentos",
+      "banco de alimentos",
+      "mantimentos",
+      "generos alimenticios",
+      "alimentos enlatados",
+      "caixa com alimentos",
+      "estoque alimentar"
     ],
     "origem": "openverse (pdm 1.0)",
     "criadoEm": "2026-10-19",
@@ -15,7 +20,7 @@
     "credito": "USDAgov",
     "fonte": "https://www.flickr.com/photos/41284017@N08/37304690592",
     "usos": 0,
-    "institucional": true
+    "institucional": false
   },
   {
     "arquivo": "ov-ba6f521b-2b1b-4be8-95e6-7b2bc2b5672c.jpg",
