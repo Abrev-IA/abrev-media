@@ -6,6 +6,11 @@
 //   (formato detectado: 1 vídeo=reel, 1 imagem=imagem, vários=carrossel) →
 //   move o card para "Publicado" (ou "Erro") e comenta o resultado.
 //
+// Card de STORY é exceção: reconhecido pelo nome ("· Stories ·"), publica cada anexo
+// como uma story separada, na ordem, e nunca manda legenda — o desc desse card é
+// briefing interno. Story entrou aqui porque o agendamento do Business Suite nunca
+// funcionou nesta conta (8 falhas em novembro/2026); pela API funciona.
+//
 // Env (.env local ou secrets do GitHub Actions):
 //   IG_ACCESS_TOKEN, IG_USER_ID                  (publicação no IG)
 //   GITHUB_TOKEN, MEDIA_REPO, MEDIA_BRANCH       (host de mídia)
@@ -20,7 +25,7 @@ import { writeFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { uploadMedia, deleteMedia } from "./media_host.mjs";
-import { publishImage, publishReel, publishCarousel } from "./ig_publish.mjs";
+import { publishImage, publishReel, publishStory, publishCarousel } from "./ig_publish.mjs";
 
 const T = "https://api.trello.com/1";
 const IG = "https://graph.instagram.com/v23.0";
@@ -74,12 +79,19 @@ async function igPermalink(mediaId) {
   return j.permalink || `(media_id ${mediaId})`;
 }
 
+// O quadro nomeia todo card de apoio como "DD/MM · Stories · ...". É essa convenção
+// que marca o card, e não o desc: o desc é briefing e muda de card para card.
+function isStoryCard(card) {
+  return /·\s*stories\s*·/i.test(card.name || "");
+}
+
 async function publishCard(card) {
   const media = (card.attachments || [])
     .filter((a) => a.isUpload && (isVideo(a) || isImage(a)))
     .sort((a, b) => (a.pos || 0) - (b.pos || 0));
   if (!media.length) throw new Error("card sem anexo de mídia");
-  const caption = card.desc || "";
+  const story = isStoryCard(card);
+  const caption = story ? "" : card.desc || "";
 
   const dir = await mkdtemp(join(tmpdir(), "abrev-pub-"));
   const hosted = [];
@@ -89,15 +101,21 @@ async function publishCard(card) {
       const up = await uploadMedia(file, m.name);
       hosted.push({ up, video: isVideo(m) });
     }
-    let mediaId;
-    if (hosted.length === 1) {
-      mediaId = hosted[0].video
-        ? await publishReel({ videoUrl: hosted[0].up.cdnUrl, caption })
-        : await publishImage({ imageUrl: hosted[0].up.cdnUrl, caption });
-    } else {
-      mediaId = await publishCarousel({ items: hosted.map((h) => h.up.cdnUrl), caption });
+    // Story: cada anexo é uma story própria, publicada na ordem do card. Não é
+    // carrossel — o Instagram não tem carrossel de story, tem sequência.
+    if (story) {
+      const ids = [];
+      for (const h of hosted) {
+        ids.push(await publishStory(h.video ? { videoUrl: h.up.cdnUrl } : { imageUrl: h.up.cdnUrl }));
+      }
+      return ids;
     }
-    return mediaId;
+    if (hosted.length === 1) {
+      return [hosted[0].video
+        ? await publishReel({ videoUrl: hosted[0].up.cdnUrl, caption })
+        : await publishImage({ imageUrl: hosted[0].up.cdnUrl, caption })];
+    }
+    return [await publishCarousel({ items: hosted.map((h) => h.up.cdnUrl), caption })];
   } finally {
     for (const h of hosted) await deleteMedia(h.up.path, h.up.sha).catch(() => {});
     await rm(dir, { recursive: true, force: true }).catch(() => {});
@@ -115,11 +133,14 @@ async function run(dry) {
   for (const card of due) {
     const n = card.name || card.id;
     const media = (card.attachments || []).filter((a) => a.isUpload && (isVideo(a) || isImage(a)));
-    const fmt = media.length > 1 ? "carrossel" : media.length === 1 ? (isVideo(media[0]) ? "reel" : "imagem") : "SEM MÍDIA";
+    const fmt = isStoryCard(card)
+      ? `story x${media.length}`
+      : media.length > 1 ? "carrossel" : media.length === 1 ? (isVideo(media[0]) ? "reel" : "imagem") : "SEM MÍDIA";
     if (dry) { console.log(`DRY: publicaria "${n}" (${fmt}, ${media.length} anexo(s))`); continue; }
     try {
-      const mediaId = await publishCard(card);
-      const permalink = await igPermalink(mediaId);
+      const mediaIds = await publishCard(card);
+      // Story não tem permalink público; igPermalink cai no fallback de media_id.
+      const permalink = (await Promise.all(mediaIds.map(igPermalink))).join(" · ");
       await trello(`/cards/${card.id}`, { method: "PUT", params: { idList: LISTS.publicado } });
       await trello(`/cards/${card.id}/actions/comments`, { method: "POST", params: { text: `✅ Publicado automaticamente: ${permalink}` } });
       console.log(`OK: "${n}" -> ${permalink}`);
