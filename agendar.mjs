@@ -41,6 +41,15 @@ async function trello(path, { method = "GET", params = {} } = {}) {
 }
 
 const ehStory = (c) => /·\s*stories\s*·/i.test(c.name || "");
+
+// PORTAO DE APROVACAO. O e-mail do dia 20 pede o aval e a resposta chega por e-mail, que
+// a maquina nao le. Entao o sinal legivel e uma etiqueta no proprio card.
+//
+// Enquanto a etiqueta NAO existir no quadro, este script exige --sem-portao para rodar:
+// e proposital. Agendar sem portao publica o que ninguem aprovou, e a falha silenciosa
+// aqui custa caro — as pecas vao ao ar.
+const ETIQUETA = process.env.TRELLO_ETIQUETA_APROVADO || "Aprovado";
+const aprovado = (c) => (c.labels || []).some((l) => (l.name || "").trim().toLowerCase() === ETIQUETA.toLowerCase());
 // O formato e o SEGUNDO campo do titulo ("DD/MM · Formato · Tema"). Procurar
 // "newsletter" no nome inteiro reprovava a story que ANUNCIA a newsletter, que e peca
 // legitima de Instagram.
@@ -63,12 +72,25 @@ function reprova(card, parceiro) {
   return null;
 }
 
-async function run({ dryRun, mes }) {
+async function run({ dryRun, mes, semPortao }) {
   const cards = await trello(`/lists/${LISTS.rascunho}/cards`, {
-    params: { fields: "name,due,desc", attachments: "true", attachment_fields: "name,isUpload" },
+    params: { fields: "name,due,desc,labels", attachments: "true", attachment_fields: "name,isUpload" },
   });
 
-  const alvo = mes ? cards.filter((c) => (diaDoCard(c) || "").endsWith(`/${String(mes).padStart(2, "0")}`)) : cards;
+  const comEtiqueta = cards.filter(aprovado).length;
+  if (!comEtiqueta && !semPortao) {
+    console.log(`Nenhum card tem a etiqueta "${ETIQUETA}".`);
+    console.log("O portão de aprovação está fechado, e é assim que tem que ser: sem sinal de");
+    console.log("aprovação legível, agendar publicaria o que ninguém aprovou.");
+    console.log(`
+Para liberar: crie a etiqueta "${ETIQUETA}" no quadro e marque as pautas aprovadas.`);
+    console.log("Para conferir o que entraria ignorando o portão: --sem-portao --dry-run");
+    return;
+  }
+  if (semPortao) console.log("[SEM-PORTÃO] ignorando a etiqueta de aprovação — use só para conferência.");
+
+  let alvo = mes ? cards.filter((c) => (diaDoCard(c) || "").endsWith(`/${String(mes).padStart(2, "0")}`)) : cards;
+  if (!semPortao) alvo = alvo.filter(aprovado);
   console.log(`${alvo.length} card(s) em Rascunho${mes ? ` no mês ${mes}` : ""}.${dryRun ? "  [DRY-RUN: nada é movido]" : ""}`);
 
   // Índice dos posts por dia, para a story achar o par. Story não entra no índice: ela
@@ -117,8 +139,8 @@ async function run({ dryRun, mes }) {
 }
 
 const { values } = parseArgs({
-  options: { "dry-run": { type: "boolean" }, mes: { type: "string" } },
+  options: { "dry-run": { type: "boolean" }, mes: { type: "string" }, "sem-portao": { type: "boolean" } },
   strict: false,
 });
-run({ dryRun: !!values["dry-run"], mes: values.mes ? Number(values.mes) : null })
+run({ dryRun: !!values["dry-run"], mes: values.mes ? Number(values.mes) : null, semPortao: !!values["sem-portao"] })
   .catch((e) => { console.error("FATAL:", e.message); process.exit(1); });
