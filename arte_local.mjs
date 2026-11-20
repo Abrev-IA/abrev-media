@@ -64,6 +64,39 @@ export function temaDoCard(nome) {
   return nome.replace(/^\d{2}\/\d{2}\s*·\s*[^·]+·\s*/, "").trim();
 }
 
+
+// Card de Stories não traz legenda: traz um briefing. O cabeçalho é instrução operacional
+// ("STORY DE APOIO ... NÃO mover para Agendado"), e o texto da peça está entre aspas,
+// dentro de um beat numerado — tipicamente "1) TEASER". Renderizar a descrição inteira
+// poria "NÃO mover para Agendado" dentro da arte.
+//
+// Devolve o texto do primeiro beat, ou null quando o card não segue o formato.
+export function textoDeStory(desc) {
+  const texto = String(desc || "");
+  const beat = texto.match(/\n\s*1\)[^\n]*\n\s*["“]([^"”]{10,400})["”]/);
+  if (beat) return beat[1].replace(/\s+/g, " ").trim();
+  const solta = texto.match(/["“]([^"”]{20,400})["”]/);
+  return solta ? solta[1].replace(/\s+/g, " ").trim() : null;
+}
+
+// Quantos beats o card descreve e o que cada um é. Serve para avisar o que a API não
+// consegue publicar: enquete e caixa de perguntas são figurinhas interativas, e a
+// Graph API publica só a imagem.
+export function beatsDeStory(desc) {
+  const beats = [];
+  for (const l of String(desc || "").split(/\r?\n/)) {
+    const m = l.match(/^\s*(\d)\)\s*(.+)$/);
+    if (m) {
+      beats.push({
+        n: Number(m[1]),
+        rotulo: m[2].trim(),
+        interativo: /enquete|pergunta|quiz|caixa de/i.test(m[2]),
+      });
+    }
+  }
+  return beats;
+}
+
 // Devolve a lista de specs prontos para o compositor. `foto` é o caminho da imagem do
 // banco (pode faltar: a peça então sai tipográfica, que é melhor que peça sem arte).
 export function paginasDoCard(card, { formato = "post", paginas = 3, foto = null } = {}) {
@@ -73,12 +106,21 @@ export function paginasDoCard(card, { formato = "post", paginas = 3, foto = null
   const assinatura = "ABREV · Associação Brasileira de Reversa do Varejo";
 
   if (formato === "story") {
+    // O "tema" do titulo de um card de story e anotacao interna — "apoio ao Carrossel
+    // tal". Nao serve de manchete. A manchete sai do proprio texto da story: primeira
+    // frase no titulo, o resto no subtitulo.
+    const linha = textoDeStory(card.desc) || primeiraFrase(partes[0] || "") || tema;
+    const f = frases(linha);
+    const manchete = f[0] || linha;
+    const resto = f.slice(1).join(" ").trim();
+    const corte = partirTitulo(manchete);
     return [{
       formato: "story", kind: foto ? "foto" : "quote",
-      eyebrow: "ABREV", title, highlight,
+      eyebrow: "ABREV",
+      title: corte.title, highlight: corte.highlight,
       image: foto || undefined,
-      subtitle: foto ? primeiraFrase(partes[0] || "") : undefined,
-      quote: foto ? undefined : paraPagina(partes[0] || tema),
+      subtitle: foto && resto ? paraPagina(resto) : undefined,
+      quote: foto ? undefined : paraPagina(resto || manchete),
       source: assinatura,
     }];
   }
