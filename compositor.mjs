@@ -61,6 +61,7 @@ async function buildHtml(spec) {
   const title = esc(spec.title || "");
   const hl = spec.highlight ? ` <span class="hl">${esc(spec.highlight)}</span>` : "";
   const img = await resolveImage(spec.image);
+  const fundo = spec.kind === "foto" && img ? img : null;
   const dim = medida(spec);
   const vertical = dim.h > 1500;
 
@@ -72,9 +73,11 @@ async function buildHtml(spec) {
   } else if (spec.kind === "image" && img) {
     body = `<div class="hero"><img src="${img}" alt=""></div>`;
   } else if (spec.kind === "foto" && img) {
-    // Foto de banco tem fundo proprio, entao entra como painel recortado com vinheta,
-    // em vez de flutuar sobre o card como o sujeito transparente faz no kind image.
-    body = `<div class="foto"><img src="${img}" alt=""><div class="fade"></div></div>`;
+    // A foto vai para o FUNDO da peça (ver .fundo/.veu), não para um painel no meio.
+    // Antes era painel recortado, e a foto virava o assunto da peça — com uma cesta
+    // básica ou um recorte 3D no lugar errado, o erro ficava em destaque. Como fundo
+    // velado, ela dá textura sem disputar com o texto. Aqui fica só o respiro.
+    body = `<div class="respiro"></div>`;
   } else if (spec.kind === "quote") {
     body = `<div class="quote">“${esc(spec.quote)}”${spec.author ? `<div class="author">${esc(spec.author)}</div>` : ""}</div>`;
   } else if (spec.kind === "texto") {
@@ -142,11 +145,21 @@ async function buildHtml(spec) {
   .foot{margin-top:auto;padding-top:26px;border-top:1px solid var(--line);display:flex;align-items:flex-end;justify-content:space-between}
   .foot .src{font-size:24px;line-height:1.35;color:rgba(255,255,255,.88);max-width:30ch}
   .foot img{width:80px;height:80px;object-fit:contain;background:#15242F;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:8px}
+  /* Foto como FUNDO da peça inteira, nunca como painel no meio. O véu navy cobre forte
+     onde está o texto (topo e rodapé) e deixa a foto aparecer como textura no meio — é o
+     padrão "foto como fundo, overlay navy" das especificações de template da ABREV. */
+  .fundo{position:absolute;inset:0}
+  .fundo img{width:100%;height:100%;object-fit:cover;display:block}
+  .veu{position:absolute;inset:0;background:linear-gradient(180deg,
+    rgba(16,29,39,.95) 0%,rgba(16,29,39,.86) 32%,rgba(16,29,39,.52) 56%,
+    rgba(16,29,39,.62) 78%,rgba(16,29,39,.96) 100%)}
+  .respiro{flex:1}
   .ring{position:absolute;right:-150px;bottom:120px;width:470px;height:470px;opacity:.028}
   .ring img{width:100%;height:100%;object-fit:contain}
 </style></head>
 <body>
 <div id="card">
+  ${fundo ? `<div class="fundo"><img src="${fundo}" alt=""><div class="veu"></div></div>` : ""}
   <div id="topbar"></div>
   <div class="ring"><img src="${ic}" alt=""></div>
   <div class="pad">
@@ -156,7 +169,7 @@ async function buildHtml(spec) {
     <h1>${title}${hl}</h1>
     ${subtitle}
     ${body}
-    <div class="foot">${source}<img src="${ic}" alt=""></div>
+    <div class="foot">${source}</div>
   </div>
 </div>
 </body></html>`;
