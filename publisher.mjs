@@ -26,6 +26,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { uploadMedia, deleteMedia } from "./media_host.mjs";
 import { publishImage, publishReel, publishStory, publishCarousel } from "./ig_publish.mjs";
+import { ETIQUETA_OBJECAO } from "./calendario_regras.mjs";
 
 const T = "https://api.trello.com/1";
 const IG = "https://graph.instagram.com/v23.0";
@@ -124,11 +125,17 @@ async function publishCard(card) {
 
 async function run(dry) {
   const cards = await trello(`/lists/${LISTS.agendado}/cards`, {
-    params: { fields: "name,desc,due", attachments: "true", attachment_fields: "url,name,mimeType,bytes,isUpload,pos" },
+    params: { fields: "name,desc,due,labels", attachments: "true", attachment_fields: "url,name,mimeType,bytes,isUpload,pos" },
   });
   const now = Date.now();
-  const due = cards.filter((c) => c.due && new Date(c.due).getTime() <= now);
-  console.log(`${cards.length} card(s) em Agendado; ${due.length} vencido(s).`);
+  // OBJEÇÃO TARDIA. Com aprovação tácita, alguém pode discordar depois que a pauta já foi
+  // para Agendado. Basta pôr a etiqueta de objeção no card: o publisher não a publica, sem
+  // ninguém precisar arrastar card de volta. É a última trava antes do ar.
+  const objetado = (c) => (c.labels || []).some((l) => (l.name || "").trim().toLowerCase() === ETIQUETA_OBJECAO.toLowerCase());
+  const segurados = cards.filter(objetado);
+  for (const c of segurados) console.log(`SEGURADO (objeção "${ETIQUETA_OBJECAO}"): ${c.name}`);
+  const due = cards.filter((c) => !objetado(c) && c.due && new Date(c.due).getTime() <= now);
+  console.log(`${cards.length} card(s) em Agendado; ${due.length} vencido(s); ${segurados.length} segurado(s) por objeção.`);
 
   for (const card of due) {
     const n = card.name || card.id;
