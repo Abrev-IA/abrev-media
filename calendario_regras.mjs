@@ -14,6 +14,22 @@ export const HORARIO_STORY = { "reel+card": "19:00", reel: "19:00", carrossel: "
 
 export const BRT_PARA_UTC = 3; // Brasília não tem horário de verão desde 2019
 
+// APROVAÇÃO TÁCITA (decisão do Alan, 22/11/2026): sem manifestação, a pauta está aprovada.
+// O e-mail do dia 20 não pede aval — avisa o que vai ao ar e abre prazo para objeção.
+//
+// O PRAZO É O QUE TORNA ISSO SEGURO. Sem ele, "silêncio aprova" vira "aprovado no instante
+// em que o card existe", e ninguém teria tempo de se manifestar. Pautas do mês M ficam
+// aprovadas a partir deste dia do mês M-1.
+export const PRAZO_OBJECAO_DIA = 25;
+
+// Quem discorda, responde o e-mail; quem lê a resposta marca o card com esta etiqueta. Ela
+// segura a peça em DOIS pontos: o agendamento não a agenda, e o publisher não a publica
+// mesmo que já esteja em Agendado — então objeção tardia também é respeitada.
+export const ETIQUETA_OBJECAO = "Ajustar";
+
+// Atalho opcional: card com esta etiqueta é agendado antes do prazo acabar.
+export const ETIQUETA_APROVADO = "Aprovado";
+
 // Texto legível das regras, para quem abrir o calendário daqui a três meses saber como
 // ele foi montado. É conteúdo, não código: pode ser editado à vontade.
 export const REGRAS = {
@@ -31,15 +47,18 @@ export const REGRAS = {
   ciclo: [
     "Dia 12 — cronograma.mjs cria as pautas do mês seguinte em Rascunho, SEM data.",
     "Dias 15 a 20 — art_routine.mjs gera as artes e anexa aos cards.",
-    "Dia 20 — aprovacao.mjs envia o cronograma por e-mail para aprovação.",
-    "Aprovação — as pautas aprovadas recebem a etiqueta \"Aprovado\" no Trello.",
-    "agendar.mjs — põe data e hora pela tabela acima e move para Agendado.",
+    "Dia 20 — aprovacao.mjs envia o cronograma por e-mail, como AVISO: o que vai ao ar no mês seguinte.",
+    "Até o dia 25 — quem discordar de alguma pauta responde o e-mail; a pauta recebe a etiqueta \"Ajustar\".",
+    "Dia 25 — sem manifestação, o mês está aprovado (aprovação tácita).",
+    "agendar.mjs — a partir do dia 25, põe data e hora pela tabela acima e move para Agendado.",
     "publisher.mjs — publica no horário e move para Publicado.",
   ],
   convencao_do_card: "Título \"DD/MM · Formato · Tema\". Legenda até o primeiro marcador; depois vêm [RASCUNHO], [VISUAL] e notas internas, que nunca são publicadas.",
+  aprovacao: "Tácita: sem manifestação até o dia 25, a pauta do mês seguinte está aprovada. O e-mail do dia 20 serve para quem quiser discordar.",
   travas: [
     "Card sem data em Rascunho não publica: é a trava do cronograma.",
-    "Sem a etiqueta \"Aprovado\", o agendamento não age.",
+    "Antes do dia 25, nada do mês seguinte é agendado — o prazo de manifestação está aberto.",
+    "Card com a etiqueta \"Ajustar\" não é agendado nem publicado, em nenhuma etapa.",
     "Story só vai se o post do mesmo dia for — exceto a que anuncia a newsletter.",
   ],
   limites: [
