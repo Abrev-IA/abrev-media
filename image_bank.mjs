@@ -60,6 +60,14 @@ async function gravarIndice(itens) {
   await rename(tmp, INDEX);
 }
 
+// O que a foto MOSTRA, quando já foi olhada: tags_visuais + descricao. As tags antigas são
+// as palavras da busca que trouxe a foto, não o conteúdo dela — foi assim que "esteira"
+// virou fivela de cinto e "devolução" virou cesta de comida (passada visual de 22/11/2026).
+// Foto ainda não anotada cai nas tags antigas.
+const palavrasDaFoto = (it) => it.tags_visuais
+  ? [it.tags_visuais, it.descricao || ""].flatMap(palavras)
+  : (it.tags || []).flatMap(palavras);
+
 // Busca por sobreposição de palavras entre o pedido e as tags. Devolve o melhor item
 // acima do limiar, ou null — e null é o sinal de que vale gerar uma imagem nova.
 export async function buscarImagem(texto, { minimo = 1, excluir = [] } = {}) {
@@ -69,7 +77,8 @@ export async function buscarImagem(texto, { minimo = 1, excluir = [] } = {}) {
   const candidatos = [];
   for (const it of itens) {
     if (excluir.includes(it.arquivo)) continue;
-    const tags = new Set(it.tags.flatMap(palavras));
+    if (it.adequada === false) continue;
+    const tags = new Set(palavrasDaFoto(it));
     let score = 0;
     for (const p of alvo) if (tags.has(p)) score++;
     if (score >= minimo) candidatos.push({ item: it, score });
@@ -161,7 +170,7 @@ export async function imagemPadrao({ excluir = [] } = {}) {
     let itens = [];
     try { itens = JSON.parse(await readFile(join(base, "index.json"), "utf8")); } catch { continue; }
     const candidatos = itens
-      .filter((i) => i.institucional && !excluir.includes(i.arquivo))
+      .filter((i) => i.institucional && i.adequada !== false && !excluir.includes(i.arquivo))
       .sort((a, b) => (a.usos || 0) - (b.usos || 0));
     for (const c of candidatos) {
       // Confere que o arquivo existe: índice e pasta podem desencontrar, e devolver um
@@ -172,6 +181,25 @@ export async function imagemPadrao({ excluir = [] } = {}) {
     }
   }
   return null;
+}
+
+// Grava o que a foto mostra, em lote e sob trava. anotacoes: { arquivo: {descricao,
+// tags_visuais, adequada, motivo} }. adequada:false tira a foto da busca sem apagá-la.
+export async function anotarImagens(anotacoes) {
+  const destravar = await travarIndice();
+  try {
+    const itens = await lerIndice();
+    let n = 0;
+    for (const it of itens) {
+      const a = anotacoes[it.arquivo];
+      if (!a) continue;
+      Object.assign(it, a, { anotadaEm: new Date().toISOString().slice(0, 10) });
+      if (it.adequada === false && it.institucional) it.institucional = false;
+      n++;
+    }
+    await gravarIndice(itens);
+    return n;
+  } finally { await destravar(); }
 }
 
 export async function registrarUso(arquivo) {
@@ -189,6 +217,16 @@ if (process.argv[1] && import.meta.url === (await import("node:url")).pathToFile
     const arqs = await sincronizarInstitucional();
     console.log(`${arqs.length} foto(s) copiadas para banco_institucional/:`);
     for (const a of arqs) console.log("   " + a);
+  } else if (cmd === "anotar") {
+    // node image_bank.mjs anotar <pasta com mapa.json + anot_*.json>
+    const { readdir } = await import("node:fs/promises");
+    const mapa = JSON.parse(await readFile(join(arg, "mapa.json"), "utf8"));
+    const anot = {};
+    for (const f of (await readdir(arg)).filter((f) => /^anot_\d+\.json$/.test(f)))
+      for (const [num, descricao, tv, adequada, motivo] of JSON.parse(await readFile(join(arg, f), "utf8")))
+        if (mapa[num]) anot[mapa[num]] = { descricao, tags_visuais: tv, adequada, ...(motivo ? { motivo } : {}) };
+    const n = await anotarImagens(anot);
+    console.log(`${Object.keys(anot).length} anotação(ões) lidas, ${n} aplicada(s) no índice`);
   } else if (cmd === "buscar") {
     const r = await buscarImagem(arg || "");
     console.log(r ? `achou (score ${r.score}): ${r.arquivo}\n  tags: ${r.meta.tags.join(", ")}` : "nada no banco — geraria imagem nova");
