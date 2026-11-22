@@ -22,10 +22,10 @@
 // Uso: node --env-file=.env agendar.mjs --dry-run     # mostra o que faria
 //      node --env-file=.env agendar.mjs               # agenda
 //      node --env-file=.env agendar.mjs --mes=12      # só dezembro
-//      node --env-file=.env agendar.mjs --sem-portao --dry-run   # confere ignorando a etiqueta
+//      node --env-file=.env agendar.mjs --sem-portao --dry-run   # confere ignorando o prazo
 
 import { parseArgs } from "node:util";
-import { HORARIO_PECA, HORARIO_STORY, BRT_PARA_UTC } from "./calendario_regras.mjs";
+import { HORARIO_PECA, HORARIO_STORY, BRT_PARA_UTC, PRAZO_OBJECAO_DIA, ETIQUETA_OBJECAO, ETIQUETA_APROVADO } from "./calendario_regras.mjs";
 
 const T = "https://api.trello.com/1";
 const LISTS = {
@@ -49,11 +49,40 @@ async function trello(path, { method = "GET", params = {} } = {}) {
   return json;
 }
 
-// PORTÃO DE APROVAÇÃO. O e-mail do dia 20 pede o aval e a resposta chega por e-mail, que
-// a máquina não lê. Então o sinal legível é uma etiqueta no próprio card. Sem etiqueta no
-// quadro, nada roda — e é proposital: agendar sem portão publicaria o que ninguém aprovou.
-const ETIQUETA = process.env.TRELLO_ETIQUETA_APROVADO || "Aprovado";
-const aprovado = (c) => (c.labels || []).some((l) => (l.name || "").trim().toLowerCase() === ETIQUETA.toLowerCase());
+// APROVAÇÃO TÁCITA (decisão do Alan, 22/11/2026). Sem manifestação, a pauta está
+// aprovada. O que segura uma pauta é a OBJEÇÃO, não a falta de aval:
+//   - etiqueta "Ajustar"  -> segurada, sempre (alguém discordou)
+//   - etiqueta "Aprovado" -> liberada já, antes do prazo (atalho opcional)
+//   - nenhuma das duas    -> liberada quando o prazo de manifestação acaba
+// O prazo é o que torna "silêncio aprova" seguro: sem ele, a pauta estaria aprovada no
+// instante em que o card existe, e ninguém teria tempo de discordar.
+const temEtiqueta = (c, nome) => (c.labels || []).some((l) => (l.name || "").trim().toLowerCase() === nome.toLowerCase());
+
+// Fim do prazo para as pautas do mês M: fim do dia PRAZO_OBJECAO_DIA do mês M-1, em
+// Brasília. "Até o dia 25" inclui o dia 25 inteiro; a liberação é a 00h do dia 26.
+function fimDoPrazo(card, agora = new Date()) {
+  const m = (card.name || "").match(/^\d{2}\/(\d{2})/);
+  if (!m) return null;
+  const mm = Number(m[1]);
+  const mesAtual = agora.getUTCMonth() + 1;
+  const ano = agora.getUTCFullYear() + (mm < mesAtual - 6 ? 1 : 0);
+  // mês anterior ao da pauta (janeiro -> dezembro do ano anterior)
+  const anoPrazo = mm === 1 ? ano - 1 : ano;
+  const mesPrazo = mm === 1 ? 12 : mm - 1;
+  return new Date(Date.UTC(anoPrazo, mesPrazo - 1, PRAZO_OBJECAO_DIA + 1, BRT_PARA_UTC, 0));
+}
+
+// Devolve null quando a pauta está liberada, ou o motivo de estar segurada.
+function segura(card, { semPrazo = false } = {}) {
+  if (temEtiqueta(card, ETIQUETA_OBJECAO)) return `objeção registrada (etiqueta "${ETIQUETA_OBJECAO}")`;
+  if (temEtiqueta(card, ETIQUETA_APROVADO)) return null;
+  if (semPrazo) return null;
+  const fim = fimDoPrazo(card);
+  if (fim && Date.now() < fim.getTime()) {
+    return `prazo de manifestação aberto até ${String(PRAZO_OBJECAO_DIA).padStart(2, "0")}/${fim.toISOString().slice(5, 7)}`;
+  }
+  return null;
+}
 
 const ehStory = (c) => /·\s*stories\s*·/i.test(c.name || "");
 // O formato é o SEGUNDO campo do título ("DD/MM · Formato · Tema"). Procurar no nome
@@ -100,7 +129,9 @@ function horarioDe(card) {
 }
 
 // O que impede um card de ser agendado. Devolve null quando está pronto.
-function reprova(card, parceiro) {
+function reprova(card, parceiro, opcoes) {
+  const motivo = segura(card, opcoes);
+  if (motivo) return motivo;
   if (ehNewsletter(card)) return "newsletter não publica no Instagram";
   if (!temArte(card)) return "sem arte anexada";
   const { due } = horarioDe(card);
@@ -120,18 +151,9 @@ async function run({ dryRun, mes, semPortao }) {
     params: { fields: "name,due,desc,labels", attachments: "true", attachment_fields: "name,isUpload" },
   });
 
-  if (!cards.some(aprovado) && !semPortao) {
-    console.log(`Nenhum card tem a etiqueta "${ETIQUETA}".`);
-    console.log("O portão de aprovação está fechado, e é assim que tem que ser: sem sinal de");
-    console.log("aprovação legível, agendar publicaria o que ninguém aprovou.");
-    console.log(`\nPara liberar: crie a etiqueta "${ETIQUETA}" no quadro e marque as pautas aprovadas.`);
-    console.log("Para conferir o que entraria ignorando o portão: --sem-portao --dry-run");
-    return;
-  }
-  if (semPortao) console.log("[SEM-PORTÃO] ignorando a etiqueta de aprovação — use só para conferência.");
+  if (semPortao) console.log("[SEM-PRAZO] ignorando o prazo de manifestação — use só para conferência.");
 
   let alvo = mes ? cards.filter((c) => (diaDoCard(c) || "").endsWith(`/${String(mes).padStart(2, "0")}`)) : cards;
-  if (!semPortao) alvo = alvo.filter(aprovado);
   console.log(`${alvo.length} card(s)${mes ? ` do mês ${mes}` : ""} em avaliação.${dryRun ? "  [DRY-RUN: nada é movido]" : ""}`);
 
   // Posts por dia, para a story achar o par. Story não entra: ela é o apoio.
@@ -141,11 +163,12 @@ async function run({ dryRun, mes, semPortao }) {
   const vai = [], fica = [];
   for (const card of alvo) {
     const parceiro = ehStory(card) ? posts.get(diaDoCard(card)) : null;
-    const motivo = reprova(card, parceiro);
+    const motivo = reprova(card, parceiro, { semPrazo: semPortao });
     if (motivo) { fica.push({ card, motivo }); continue; }
     // Story só vai se o post dela também for, pelos mesmos critérios.
-    if (parceiro && reprova(parceiro, null)) {
-      fica.push({ card, motivo: `o post do dia não está pronto (${reprova(parceiro, null)})` });
+    const doPost = parceiro && reprova(parceiro, null, { semPrazo: semPortao });
+    if (doPost) {
+      fica.push({ card, motivo: `o post do dia está segurado (${doPost})` });
       continue;
     }
     vai.push({ card, ...horarioDe(card) });
