@@ -1,0 +1,39 @@
+name: Agendar pautas aprovadas (calendário ABREV)
+
+# Passo entre a aprovação e a publicação: pega as pautas com a etiqueta "Aprovado", põe
+# data e hora pela tabela de calendario_regras.mjs e move para "Agendado". Daí em diante
+# o workflow de publicação assume.
+#
+# Rodar todo dia é seguro: sem a etiqueta no quadro, o script não faz nada (é o portão de
+# aprovação), e card já agendado não está mais em Rascunho para ser pego de novo.
+on:
+  schedule:
+    - cron: "0 11 * * *"   # todo dia, 11:00 UTC (08h BRT)
+  workflow_dispatch:
+    inputs:
+      previa:
+        description: "Só mostrar o que faria, sem mover nada"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agendar-abrev
+  cancel-in-progress: false
+
+jobs:
+  agendar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Agendar o que foi aprovado
+        run: node agendar.mjs ${{ (github.event_name == 'workflow_dispatch' && inputs.previa) && '--dry-run' || '' }}
+        env:
+          TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
+          TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
