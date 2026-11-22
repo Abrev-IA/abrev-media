@@ -14,7 +14,12 @@
 // vezes se a rotina rodar de novo.
 //
 // Env: TRELLO_KEY, TRELLO_TOKEN, GITHUB_TOKEN (host de mídia).
-//      Para enviar: SMTP_USER, SMTP_PASS (senha de app do Gmail), APROVACAO_PARA.
+//      Para enviar: SMTP_USER, SMTP_PASS (senha de app do Gmail).
+//      APROVACAO_PARA é opcional: sem ele, vai para os destinatários padrão abaixo.
+//
+// APROVAÇÃO TÁCITA (decisão do Alan, 22/11/2026): este e-mail NÃO pede aval. Ele avisa o
+// que vai ao ar e abre prazo para objeção. Sem resposta até o dia do prazo, o mês está
+// aprovado. Responder só é preciso para discordar.
 //      Opcionais: SMTP_HOST (smtp.gmail.com), SMTP_PORT (465), APROVACAO_COPIA,
 //                 TRELLO_LIST_RASCUNHO, APROVACAO_MES (1-12), APROVACAO_ANO.
 //
@@ -22,6 +27,7 @@
 //      node --env-file=.env aprovacao.mjs --enviar   # monta e envia
 //      node --env-file=.env aprovacao.mjs --mes=12   # força o mês
 
+import { PRAZO_OBJECAO_DIA } from "./calendario_regras.mjs";
 import { readFile, writeFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -169,7 +175,8 @@ function montarHtml(pautas, mes, ano) {
       <div style="font:bold 30px/1.15 Arial,sans-serif;color:#ffffff;padding-top:14px">Cronograma de ${esc(nome)}/${ano}</div>
       <div style="font:16px/1.5 Arial,sans-serif;color:#c3cfd8;padding-top:12px">
         ${pautas.length} publica&ccedil;${pautas.length === 1 ? "&atilde;o" : "&otilde;es"} &middot; ${comArte} com arte pronta${artigos ? ` &middot; ${artigos} newsletter${artigos > 1 ? "s" : ""} (texto, sem arte)` : ""}.<br>
-        Responda este e-mail com o aval ou com os ajustes. O que for aprovado entra na fila e &eacute; publicado no dia e no hor&aacute;rio.
+        <b style="color:#ffffff">N&atilde;o &eacute; preciso responder para aprovar.</b> Sem manifesta&ccedil;&atilde;o at&eacute; o dia ${PRAZO_OBJECAO_DIA}, o cronograma est&aacute; aprovado e cada pe&ccedil;a vai ao ar no dia e no hor&aacute;rio.<br>
+        Discorda de alguma? Responda este e-mail dizendo qual &mdash; ela fica segurada at&eacute; ser ajustada.
       </div>
     </td></tr>
     <tr><td style="padding:30px 32px 6px">
@@ -309,7 +316,9 @@ async function run({ enviarAgora, semMidia, mes, ano }) {
     return;
   }
 
-  const para = (process.env.APROVACAO_PARA || "").split(",").map((s) => s.trim()).filter(Boolean);
+  // Destinatários padrão. O e-mail do Mauricio fica de fora por ora, por decisão do Alan.
+  const PADRAO = "adm@abrev.org, keila.berti@gmail.com";
+  const para = (process.env.APROVACAO_PARA || PADRAO).split(",").map((s) => s.trim()).filter(Boolean);
   // Cópia sempre para quem administra: o disparo nunca sai sem você receber o que saiu.
   const copia = (process.env.APROVACAO_COPIA || "administradorabrev@gmail.com")
     .split(",").map((s) => s.trim()).filter(Boolean);
@@ -317,7 +326,7 @@ async function run({ enviarAgora, semMidia, mes, ano }) {
 
   const destinos = await enviar({
     para, copia,
-    assunto: `ABREV · cronograma de ${MESES[mes - 1]}/${ano} para aprovação`,
+    assunto: `ABREV · cronograma de ${MESES[mes - 1]}/${ano} — aprovado se não houver objeção até ${PRAZO_OBJECAO_DIA}/${String(new Date().getMonth() + 1).padStart(2, "0")}`,
     html,
   });
   console.log(`enviado para: ${destinos.join(", ")}`);
