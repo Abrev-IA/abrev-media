@@ -2,16 +2,11 @@
   {
     "arquivo": "ov-3349658e-d628-4b10-8f41-3d1fba1850b5.jpg",
     "tags": [
-      "alimento",
-      "alimentos",
-      "cesta basica",
-      "doacao de alimentos",
-      "banco de alimentos",
-      "mantimentos",
-      "generos alimenticios",
-      "alimentos enlatados",
-      "caixa com alimentos",
-      "estoque alimentar"
+      "estoque",
+      "armazem",
+      "prateleira",
+      "deposito",
+      "corredor"
     ],
     "origem": "openverse (pdm 1.0)",
     "criadoEm": "2026-10-19",
@@ -20,7 +15,11 @@
     "credito": "USDAgov",
     "fonte": "https://www.flickr.com/photos/41284017@N08/37304690592",
     "usos": 0,
-    "institucional": false
+    "institucional": true,
+    "descricao": "Corredor de armazém com prateleiras e caixas abertas cheias de produtos",
+    "tags_visuais": "armazem, estoque, prateleira, caixa, produtos, corredor",
+    "adequada": true,
+    "anotadaEm": "2026-11-22"
   },
   {
     "arquivo": "ov-ba6f521b-2b1b-4be8-95e6-7b2bc2b5672c.jpg",
@@ -38,7 +37,11 @@
     "credito": null,
     "fonte": "https://www.rawpixel.com/image/6035375/photo-image-public-domain-free-box",
     "usos": 0,
-    "institucional": true
+    "institucional": true,
+    "descricao": "Centro de distribuição com várias esteiras carregadas de caixas",
+    "tags_visuais": "esteira, centro de distribuicao, caixas, armazem, logistica, triagem",
+    "adequada": true,
+    "anotadaEm": "2026-11-22"
   },
   {
     "arquivo": "ov-60d07cfc-45e4-4416-9737-4a446f33bec0.jpg",
@@ -56,7 +59,11 @@
     "credito": "Startup Stock Photos",
     "fonte": "https://stocksnap.io/photo/team-meeting-VQXYE2ZEHC",
     "usos": 0,
-    "institucional": true
+    "institucional": true,
+    "descricao": "Pessoas trabalhando juntas numa mesa com papéis e laptop",
+    "tags_visuais": "equipe, reuniao, mesa, escritorio, planejamento",
+    "adequada": true,
+    "anotadaEm": "2026-11-22"
   },
   {
     "arquivo": "ov-a4916f80-e48d-4a40-b960-ee82f2c699b3.jpg",
@@ -74,7 +81,11 @@
     "credito": "USDAgov",
     "fonte": "https://www.flickr.com/photos/41284017@N08/36665189353",
     "usos": 0,
-    "institucional": true
+    "institucional": true,
+    "descricao": "Empilhadeira vermelha num corredor de armazém",
+    "tags_visuais": "empilhadeira, armazem, corredor, estoque, operacao",
+    "adequada": true,
+    "anotadaEm": "2026-11-22"
   },
   {
     "arquivo": "ov-13f9faf6-db29-4d65-9682-2ffd9f73e14e.jpg",
@@ -92,6 +103,10 @@
     "credito": "USDAgov",
     "fonte": "https://www.flickr.com/photos/41284017@N08/37304657602",
     "usos": 0,
-    "institucional": true
+    "institucional": true,
+    "descricao": "Armazém com empilhadeira, paletes de caixas e pessoas trabalhando",
+    "tags_visuais": "armazem, paletes, empilhadeira, equipe, operacao, estoque",
+    "adequada": true,
+    "anotadaEm": "2026-11-22"
   }
 ]
