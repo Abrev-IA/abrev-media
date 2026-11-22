@@ -1,0 +1,39 @@
+name: Atualizar calendário do cockpit
+
+# Gera calendario/calendario.json — planejado (Trello) reconciliado com o que foi ao ar
+# (Graph API do Instagram), mais as regras do mês — e grava neste repositório, num
+# caminho fixo que o cockpit lê.
+#
+# Só lê do Trello e do Instagram; a única coisa que escreve é o próprio JSON. Não move
+# card, não publica nada em rede social.
+on:
+  schedule:
+    - cron: "0 */6 * * *"  # a cada 6 horas
+  workflow_dispatch: {}
+
+permissions:
+  contents: write            # grava o calendario.json no repositório
+
+concurrency:
+  group: calendario-abrev
+  cancel-in-progress: true   # só a versão mais nova do calendário interessa
+
+jobs:
+  calendario:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Gerar e publicar o calendário
+        run: node calendario_feed.mjs
+        env:
+          TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
+          TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+          MEDIA_REPO: Abrev-IA/abrev-media
+          MEDIA_BRANCH: main
