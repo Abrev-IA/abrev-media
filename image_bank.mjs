@@ -20,7 +20,11 @@ import { fileURLToPath } from "node:url";
 // Relativo ao módulo, não caminho absoluto desta máquina: o mesmo arquivo roda no runner
 // do GitHub, onde "C:/Users/Projeto" não existe.
 const RAIZ = dirname(fileURLToPath(import.meta.url));
-const DIR = join(RAIZ, "banco_imagens");
+// No runner do GitHub o acervo completo não existe; lá vale banco_runner/, que é só a
+// parte aprovada (adequada !== false), redimensionada. Gerada por: node image_bank.mjs runner
+import { existsSync } from "node:fs";
+const RUNNER = join(RAIZ, "banco_runner");
+const DIR = existsSync(join(RAIZ, "banco_imagens", "index.json")) ? join(RAIZ, "banco_imagens") : RUNNER;
 const INDEX = join(DIR, "index.json");
 
 // O acervo completo são 146 MB e fica só aqui. Para o cron, viaja uma pasta pequena com
@@ -217,6 +221,21 @@ if (process.argv[1] && import.meta.url === (await import("node:url")).pathToFile
     const arqs = await sincronizarInstitucional();
     console.log(`${arqs.length} foto(s) copiadas para banco_institucional/:`);
     for (const a of arqs) console.log("   " + a);
+  } else if (cmd === "runner") {
+    const { execFileSync } = await import("node:child_process");
+    const ff = (await import("ffmpeg-static")).default;
+    const ok = (await lerIndice()).filter((i) => i.adequada !== false);
+    await rm(RUNNER, { recursive: true, force: true });
+    await mkdir(RUNNER, { recursive: true });
+    const saida = [];
+    for (const i of ok) {
+      const nome = i.arquivo.replace(/.(png|webp|jpe?g)$/i, ".jpg");
+      execFileSync(ff, ["-y", "-loglevel", "error", "-i", join(DIR, i.arquivo),
+        "-vf", "scale='min(2000,iw)':-2", "-q:v", "4", join(RUNNER, nome)]);
+      saida.push({ ...i, arquivo: nome });
+    }
+    await writeFile(join(RUNNER, "index.json"), JSON.stringify(saida, null, 2));
+    console.log(`${saida.length} foto(s) aprovadas em banco_runner/`);
   } else if (cmd === "anotar") {
     // node image_bank.mjs anotar <pasta com mapa.json + anot_*.json>
     const { readdir } = await import("node:fs/promises");
