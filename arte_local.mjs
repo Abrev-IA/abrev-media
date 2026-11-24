@@ -99,7 +99,16 @@ export function beatsDeStory(desc) {
 
 // Devolve a lista de specs prontos para o compositor. `foto` é o caminho da imagem do
 // banco (pode faltar: a peça então sai tipográfica, que é melhor que peça sem arte).
-export function paginasDoCard(card, { formato = "post", paginas = 3, foto = null } = {}) {
+// Rodízio de fundos. `variante` é um número estável da peça (o dia do mês serve): a mesma
+// peça sai sempre igual, e peças vizinhas saem diferentes. Antes tudo era navy ou foto.
+//   stories        → tipográfico em fundo claro, girando creme/lima/celeste/amarelo
+//   capa e post    → foto com véu navy ou teal, alternando
+//   miolo carrossel→ creme na 1ª página interna, depois teal/lima/celeste
+const CLAROS = ["creme", "lima", "celeste", "amarelo"];
+const temaFoto = (v) => (v % 2 ? "teal" : "navy");
+const temaMiolo = (v, i) => (i === 0 ? "creme" : ["teal", "lima", "celeste"][(v + i) % 3]);
+
+export function paginasDoCard(card, { formato = "post", paginas = 3, foto = null, variante = 0 } = {}) {
   const tema = temaDoCard(card.name);
   const { title, highlight } = partirTitulo(tema);
   const partes = paragrafos(legendaDoCard(card.desc));
@@ -114,20 +123,20 @@ export function paginasDoCard(card, { formato = "post", paginas = 3, foto = null
     const manchete = f[0] || linha;
     const resto = f.slice(1).join(" ").trim();
     const corte = partirTitulo(manchete);
+    // Story sai tipográfica em cor clara: é a peça que mais aparece em sequência, e com
+    // foto+véu toda story ficava igual ao post que ela apoia.
     return [{
-      formato: "story", kind: foto ? "foto" : "quote",
+      formato: "story", kind: resto ? "quote" : "respiro", tema: CLAROS[variante % CLAROS.length],
       eyebrow: "ABREV",
       title: corte.title, highlight: corte.highlight,
-      image: foto || undefined,
-      subtitle: foto && resto ? paraPagina(resto) : undefined,
-      quote: foto ? undefined : paraPagina(resto || manchete),
+      quote: resto ? paraPagina(resto) : undefined,
       source: assinatura,
     }];
   }
 
   if (paginas <= 1) {
     return [{
-      formato: "post", kind: foto ? "foto" : "quote",
+      formato: "post", kind: foto ? "foto" : "quote", tema: foto ? temaFoto(variante) : "creme",
       title, highlight,
       image: foto || undefined,
       subtitle: foto ? primeiraFrase(partes[0] || "") : undefined,
@@ -144,14 +153,14 @@ export function paginasDoCard(card, { formato = "post", paginas = 3, foto = null
   const selo = (i) => `${String(i + 1).padStart(2, "0")}/${String(total).padStart(2, "0")}`;
 
   const capa = {
-    formato: "post", kind: foto ? "foto" : "cover",
+    formato: "post", kind: foto ? "foto" : "cover", tema: foto ? temaFoto(variante) : "navy",
     title, highlight,
     image: foto || undefined,
     subtitle: primeiraFrase(partes[0] || ""),
     badge: selo(0), source: assinatura,
   };
   return [capa, ...corpo.map((p, i) => ({
-    formato: "post", kind: "texto",
+    formato: "post", kind: "texto", tema: temaMiolo(variante, i),
     quote: paraPagina(p),
     badge: selo(i + 1),
     source: i === corpo.length - 1 ? assinatura : undefined,
@@ -190,7 +199,7 @@ if (process.argv[1] && import.meta.url === (await import("node:url")).pathToFile
     const achado = (visual ? await buscarImagem(visual, { minimo: 1, excluir: usadas }) : null)
       || await imagemPadrao({ excluir: usadas }) || await imagemPadrao();
     if (achado) usadas.push(achado.meta.arquivo);
-    const saidas = await renderizarCard(card, { formato: story ? "story" : "post", paginas, foto: achado?.arquivo }, destino);
+    const saidas = await renderizarCard(card, { formato: story ? "story" : "post", paginas, foto: achado?.arquivo, variante: Number(card.name.slice(0, 2)) || 0 }, destino);
     console.log(`${card.name.slice(0, 44).padEnd(46)} ${saidas.length} pág.  ${achado ? achado.meta.arquivo.slice(0, 22) : "sem foto"}`);
   }
 }
