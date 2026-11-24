@@ -49,7 +49,10 @@ jobs:
           fi
           echo "caminho=$caminho" >> "$GITHUB_OUTPUT"
       - name: Gerar e anexar as artes do mês
-        run: node art_routine.mjs
+        # --local: compõe com o compositor + banco de fotos (rodízio de fundos da paleta,
+        # custo zero). A esteira do cockpit só faz fundo petróleo; para voltar a ela, tire
+        # o --local.
+        run: node art_routine.mjs --local
         env:
           TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
           TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
