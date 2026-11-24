@@ -343,6 +343,8 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false, re
           formato: /stories/i.test(card.name) ? "story" : "post",
           paginas: fmt.paginas,
           foto: achado?.arquivo || null,
+          // Rodízio de fundos da paleta (ver arte_local.mjs): o dia do card escolhe a cor.
+          variante: Number(card.name.slice(0, 2)) || 0,
         }, dir);
         files = saidas.map((file) => ({ file }));
         runId = "local";
