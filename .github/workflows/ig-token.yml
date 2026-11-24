@@ -1,0 +1,34 @@
+# Renova o token do Instagram antes de vencer (vale 60 dias; aqui roda a cada ~15).
+# Não publica nada: só troca o segredo IG_ACCESS_TOKEN e registra as datas em
+# calendario/token_instagram.json (sem o token).
+name: Renovar token do Instagram
+on:
+  schedule:
+    - cron: "0 9 1,15 * *"   # dia 1 e 15, 09:00 UTC (06h BRT)
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  renovar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Renovar e gravar o segredo
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          # O GITHUB_TOKEN do próprio Actions não grava segredos; este precisa de
+          # "Secrets: read and write" no abrev-media.
+          GH_TOKEN: ${{ secrets.GH_PAT_SEGREDOS }}
+          MEDIA_REPO: ${{ github.repository }}
+        run: node ig_token.mjs
+      - name: Registrar a data de validade
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add calendario/token_instagram.json
+          git diff --cached --quiet || git commit -m "Token do Instagram renovado (datas)"
+          git push
