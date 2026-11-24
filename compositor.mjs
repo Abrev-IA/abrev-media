@@ -15,6 +15,7 @@
 //   quote?: "...", author?: "...",                  // kind quote
 //   badge?: "02/05",                                // selo de página do carrossel
 //   source?: "Levantamento ABREV · Estadão",        // rodapé (opcional)
+//   tema?: "navy" | "teal" | "creme" | "lima" | "celeste" | "amarelo"  // fundo (padrão navy)
 // }
 //
 // Uso: import { render } from "./compositor.mjs"; await render(spec, "out.png");
@@ -55,6 +56,12 @@ function corpoPara(texto, base, minimo) {
   return minimo;
 }
 
+// Fundos da paleta oficial. Escuros (navy, teal): texto creme. Claros (creme, lima,
+// celeste, amarelo): texto navy e destaque numa marca navy — amarelo sobre fundo claro
+// some, e texto branco sobre amarelo é proibido pelo manual. São os fundos dos modelos
+// oficiais (capa de vídeo celeste, chamada amarela, série lima).
+const TEMAS = ["navy", "teal", "creme", "lima", "celeste", "amarelo"];
+
 async function buildHtml(spec) {
   const ic = await icon();
   const tagline = esc(spec.tagline || "Logística Reversa do Varejo");
@@ -64,6 +71,7 @@ async function buildHtml(spec) {
   const fundo = spec.kind === "foto" && img ? img : null;
   const dim = medida(spec);
   const vertical = dim.h > 1500;
+  const tema = TEMAS.includes(spec.tema) ? spec.tema : "navy";
 
   let body = "";
   if (spec.kind === "stats") {
@@ -154,11 +162,35 @@ async function buildHtml(spec) {
     rgba(16,29,39,.95) 0%,rgba(16,29,39,.86) 32%,rgba(16,29,39,.52) 56%,
     rgba(16,29,39,.62) 78%,rgba(16,29,39,.96) 100%)}
   .respiro{flex:1}
+  /* ---- fundos ---- */
+  #card.t-teal{background:radial-gradient(130% 80% at 15% -5%,#13BDC4 0%,rgba(19,189,196,0) 55%),
+    linear-gradient(158deg,#0AA9B0 0%,#08A2A9 45%,#067A80 100%)}
+  .t-teal:not(.com-foto) h1 .hl{color:var(--navy)}
+  .t-teal .veu{background:linear-gradient(180deg,rgba(4,70,74,.95) 0%,rgba(4,70,74,.86) 32%,
+    rgba(6,110,115,.50) 56%,rgba(4,70,74,.62) 78%,rgba(4,70,74,.96) 100%)}
+  #card.t-creme{background:var(--creme)}
+  #card.t-lima{background:linear-gradient(158deg,#AFCE55 0%,var(--green) 55%,#93B53A 100%)}
+  #card.t-celeste{background:linear-gradient(158deg,#45C2EF 0%,var(--sky) 55%,#28A9D8 100%)}
+  #card.t-amarelo{background:linear-gradient(158deg,#FFD233 0%,var(--yellow) 55%,#F2BE0C 100%)}
+  #card.claro{color:var(--navy)}
+  .claro .head .tag,.claro .quote,.claro .quote .author{color:var(--navy)}
+  .claro .subtitle{color:rgba(27,47,63,.86)}
+  .claro h1 .hl{color:var(--creme);background:var(--navy);padding:0 .14em;border-radius:6px;
+    -webkit-box-decoration-break:clone;box-decoration-break:clone}
+  .t-creme h1 .hl{color:var(--teal);background:none;padding:0}
+  .claro .head img{background:none;border:none}
+  .claro .foot{border-top-color:rgba(27,47,63,.18)}
+  .claro .foot .src{color:rgba(27,47,63,.82)}
+  .claro .badge{background:var(--navy);color:var(--creme)}
+  .claro .tile{background:rgba(27,47,63,.06);border-color:rgba(27,47,63,.10)}
+  .claro .tile .desc{color:rgba(27,47,63,.85)}
+  .claro .ring{opacity:.05}
+  .t-lima .pill,.t-amarelo .pill,.t-celeste .pill{background:var(--navy);color:var(--creme)}
   .ring{position:absolute;right:-150px;bottom:120px;width:470px;height:470px;opacity:.028}
   .ring img{width:100%;height:100%;object-fit:contain}
 </style></head>
 <body>
-<div id="card">
+<div id="card" class="t-${tema}${["navy", "teal"].includes(tema) ? "" : " claro"}${fundo ? " com-foto" : ""}">
   ${fundo ? `<div class="fundo"><img src="${fundo}" alt=""><div class="veu"></div></div>` : ""}
   <div id="topbar"></div>
   <div class="ring"><img src="${ic}" alt=""></div>
