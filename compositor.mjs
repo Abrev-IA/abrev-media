@@ -27,6 +27,16 @@ import { dirname, join } from "node:path";
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 let ICON = null;
+// Logo oficial do cabeçalho, sem placa atrás: negativo (branco) em fundo escuro,
+// colorido em fundo claro — a regra do manual. Antes era o símbolo sobre um quadro escuro.
+const LOGOS = {};
+async function logo(variante) {
+  if (!LOGOS[variante]) {
+    const arq = variante === "negativo" ? "template_social/logo_negativo.png" : "template_social/oficial/ABREV_Logo_Horizontal_Colorido_Transparente.png";
+    LOGOS[variante] = "data:image/png;base64," + (await readFile(join(DIR, arq))).toString("base64");
+  }
+  return LOGOS[variante];
+}
 async function icon() {
   if (!ICON) ICON = "data:image/png;base64," + (await readFile(join(DIR, "template_social/icon_transp.png"))).toString("base64");
   return ICON;
@@ -117,7 +127,7 @@ async function buildHtml(spec) {
     background:linear-gradient(90deg,var(--green),var(--teal) 38%,var(--sky) 66%,var(--yellow))}
   .pad{position:absolute;inset:0;padding:${vertical ? "150px 78px 160px" : "78px 76px 72px"};display:flex;flex-direction:column}
   .head{display:flex;align-items:center;gap:16px}
-  .head img{width:88px;height:88px;object-fit:contain;background:#15242F;border:1px solid rgba(255,255,255,.08);border-radius:15px;padding:9px}
+  .head img.logo{height:92px;width:auto;max-width:520px;object-fit:contain;display:block}
   .head .tag{font-weight:700;letter-spacing:.14em;font-size:23px;color:var(--creme);text-transform:uppercase}
   .pill{align-self:flex-start;margin-top:52px;background:var(--yellow);color:var(--ink);
     font-family:"Montserrat";font-weight:800;font-size:23px;letter-spacing:.03em;text-transform:uppercase;
@@ -152,7 +162,7 @@ async function buildHtml(spec) {
   .stats:has(.tile:only-child) .desc{font-size:27px;margin-top:20px;max-width:30ch}
   .foot{margin-top:auto;padding-top:26px;border-top:1px solid var(--line);display:flex;align-items:flex-end;justify-content:space-between}
   .foot .src{font-size:24px;line-height:1.35;color:rgba(255,255,255,.88);max-width:30ch}
-  .foot img{width:80px;height:80px;object-fit:contain;background:#15242F;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:8px}
+  .foot img{width:80px;height:80px;object-fit:contain}
   /* Foto como FUNDO da peça inteira, nunca como painel no meio. O véu navy cobre forte
      onde está o texto (topo e rodapé) e deixa a foto aparecer como textura no meio — é o
      padrão "foto como fundo, overlay navy" das especificações de template da ABREV. */
@@ -196,7 +206,7 @@ async function buildHtml(spec) {
   <div class="ring"><img src="${ic}" alt=""></div>
   <div class="pad">
     ${badge}
-    <div class="head"><img src="${ic}" alt="ABREV"><div class="tag">${tagline}</div></div>
+    <div class="head"><img class="logo" src="${await logo(["navy", "teal"].includes(tema) ? "negativo" : "colorido")}" alt="ABREV"></div>
     ${spec.eyebrow ? `<span class="pill">${esc(spec.eyebrow)}</span>` : ""}
     <h1>${title}${hl}</h1>
     ${subtitle}
