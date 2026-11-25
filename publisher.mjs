@@ -82,6 +82,40 @@ async function igPermalink(mediaId) {
 
 // O quadro nomeia todo card de apoio como "DD/MM · Stories · ...". É essa convenção
 // que marca o card, e não o desc: o desc é briefing e muda de card para card.
+// LinkedIn via Make (cenário "ABREV - publicar no LinkedIn"): enquanto a API própria do
+// LinkedIn não é liberada, o post vai para um webhook do Make, que publica na página da
+// ABREV com a conexão já aprovada dele. O módulo do Make publica UMA imagem; num carrossel
+// vai a capa. Sem LINKEDIN_WEBHOOK_URL, o passo é pulado.
+//
+// O texto do LinkedIn usa o "little text format": ( ) [ ] { } < > @ | ~ _ * \ são reservados
+// e, sem escape, cortam o post. Hashtag vira o elemento {hashtag|\#|tag}.
+function textoLinkedIn(t) {
+  return String(t || "")
+    .replace(/[\\|{}@[\]()<>*_~]/g, (c) => "\\" + c)
+    .replace(/#([\p{L}\p{N}_]+)/gu, (_, tag) => `{hashtag|\\#|${tag}}`);
+}
+
+async function postLinkedIn(card, caption, imagemUrl) {
+  const url = process.env.LINKEDIN_WEBHOOK_URL;
+  if (!url) return "LinkedIn: pulado (LINKEDIN_WEBHOOK_URL ausente)";
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tipo: "imagem", texto: textoLinkedIn(caption), imagem_url: imagemUrl,
+      documento_url: "", titulo: (card.name || "").split("·").pop().trim(), card_id: card.id, data: card.due }) });
+  if (!r.ok) throw new Error(`LinkedIn (Make) recusou: HTTP ${r.status}`);
+  // O Make responde "Accepted" e roda o cenário em seguida, baixando a imagem pela URL.
+  // Espera antes de a imagem temporária ser apagada no finally.
+  await new Promise((res) => setTimeout(res, 90000));
+  return "LinkedIn: enviado ao Make";
+}
+
+// A legenda é a descrição até o primeiro marcador ([VISUAL], [RASCUNHO]...). O resto é
+// anotação interna e não pode ir ao ar.
+function legenda(desc) {
+  const linhas = String(desc || "").split(/\r?\n/);
+  const i = linhas.findIndex((l) => /^\s*\[[A-ZÁÉÍÓÚÇ]+\]/.test(l));
+  return (i < 0 ? linhas : linhas.slice(0, i)).join("\n").trim();
+}
+
 function isStoryCard(card) {
   return /·\s*stories\s*·/i.test(card.name || "");
 }
@@ -92,7 +126,7 @@ async function publishCard(card) {
     .sort((a, b) => (a.pos || 0) - (b.pos || 0));
   if (!media.length) throw new Error("card sem anexo de mídia");
   const story = isStoryCard(card);
-  const caption = story ? "" : card.desc || "";
+  const caption = story ? "" : legenda(card.desc);
 
   const dir = await mkdtemp(join(tmpdir(), "abrev-pub-"));
   const hosted = [];
@@ -111,12 +145,18 @@ async function publishCard(card) {
       }
       return ids;
     }
-    if (hosted.length === 1) {
-      return [hosted[0].video
+    const ids = hosted.length === 1
+      ? [hosted[0].video
         ? await publishReel({ videoUrl: hosted[0].up.cdnUrl, caption })
-        : await publishImage({ imageUrl: hosted[0].up.cdnUrl, caption })];
-    }
-    return [await publishCarousel({ items: hosted.map((h) => h.up.cdnUrl), caption })];
+        : await publishImage({ imageUrl: hosted[0].up.cdnUrl, caption })]
+      : [await publishCarousel({ items: hosted.map((h) => h.up.cdnUrl), caption })];
+    // LinkedIn depois do Instagram: falha aqui não desfaz o post do Instagram; vira aviso.
+    const capa = hosted.find((h) => !h.video);
+    if (capa) {
+      try { ids.linkedin = await postLinkedIn(card, caption, capa.up.cdnUrl); }
+      catch (e) { ids.linkedin = `LinkedIn: FALHOU (${e.message})`; }
+    } else ids.linkedin = "LinkedIn: pulado (só vídeo)";
+    return ids;
   } finally {
     for (const h of hosted) await deleteMedia(h.up.path, h.up.sha).catch(() => {});
     await rm(dir, { recursive: true, force: true }).catch(() => {});
@@ -149,8 +189,9 @@ async function run(dry) {
       // Story não tem permalink público; igPermalink cai no fallback de media_id.
       const permalink = (await Promise.all(mediaIds.map(igPermalink))).join(" · ");
       await trello(`/cards/${card.id}`, { method: "PUT", params: { idList: LISTS.publicado } });
-      await trello(`/cards/${card.id}/actions/comments`, { method: "POST", params: { text: `✅ Publicado automaticamente: ${permalink}` } });
-      console.log(`OK: "${n}" -> ${permalink}`);
+      await trello(`/cards/${card.id}/actions/comments`, { method: "POST", params: { text: `✅ Publicado automaticamente: ${permalink}${mediaIds.linkedin ? `
+${mediaIds.linkedin}` : ""}` } });
+      console.log(`OK: "${n}" -> ${permalink}${mediaIds.linkedin ? ` | ${mediaIds.linkedin}` : ""}`);
     } catch (e) {
       await trello(`/cards/${card.id}`, { method: "PUT", params: { idList: LISTS.erro } }).catch(() => {});
       await trello(`/cards/${card.id}/actions/comments`, { method: "POST", params: { text: `❌ Falha ao publicar: ${e.message}` } }).catch(() => {});
