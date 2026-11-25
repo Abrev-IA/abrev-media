@@ -95,6 +95,43 @@ function textoLinkedIn(t) {
     .replace(/#([\p{L}\p{N}_]+)/gu, (_, tag) => `{hashtag|\\#|${tag}}`);
 }
 
+// Carrossel no LinkedIn. O módulo pronto do Make só publica UMA imagem; para várias, o
+// cenário "ABREV - LinkedIn API (carrossel)" é um intermediário: recebe {method, path,
+// body}, chama a API do LinkedIn com a conexão aprovada do Make e devolve status,
+// uploadUrl, image e postId. O envio do arquivo para o uploadUrl é feito daqui (testado
+// em 25/11/2026: o LinkedIn aceita sem cabeçalho de autorização, HTTP 201).
+const ORG_LINKEDIN = "urn:li:organization:144984084";
+
+async function linkedinApi(method, path, body) {
+  const r = await fetch(process.env.LINKEDIN_API_URL, { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ method, path, body: body ? JSON.stringify(body) : "" }) });
+  const txt = await r.text();
+  let j; try { j = JSON.parse(txt); } catch { throw new Error(`intermediário do Make respondeu "${txt.slice(0, 80)}"`); }
+  if (!/^2\d\d$/.test(String(j.status))) throw new Error(`LinkedIn ${j.status}: ${j.erro || "sem detalhe"}`);
+  return j;
+}
+
+async function postLinkedInCarrossel(caption, urls) {
+  const imagens = [];
+  for (const url of urls) {
+    const ini = await linkedinApi("POST", "/rest/images?action=initializeUpload", { initializeUploadRequest: { owner: ORG_LINKEDIN } });
+    const bytes = Buffer.from(await (await fetch(url)).arrayBuffer());
+    const up = await fetch(ini.uploadUrl, { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: bytes });
+    if (!up.ok) throw new Error(`envio da imagem ao LinkedIn: HTTP ${up.status}`);
+    imagens.push(ini.image);
+  }
+  await new Promise((res) => setTimeout(res, 8000)); // o LinkedIn processa as imagens
+  const content = imagens.length > 1
+    ? { multiImage: { images: imagens.map((id) => ({ id, altText: "Arte ABREV" })) } }
+    : { media: { id: imagens[0] } };
+  const post = await linkedinApi("POST", "/rest/posts", {
+    author: ORG_LINKEDIN, commentary: textoLinkedIn(caption), visibility: "PUBLIC",
+    distribution: { feedDistribution: "MAIN_FEED", targetEntities: [], thirdPartyDistributionChannels: [] },
+    content, lifecycleState: "PUBLISHED", isReshareDisabledByAuthor: false,
+  });
+  return `LinkedIn: publicado (${imagens.length} imagem(ns)) ${post.postId || ""}`.trim();
+}
+
 async function postLinkedIn(card, caption, imagemUrl) {
   const url = process.env.LINKEDIN_WEBHOOK_URL;
   if (!url) return "LinkedIn: pulado (LINKEDIN_WEBHOOK_URL ausente)";
@@ -151,10 +188,13 @@ async function publishCard(card) {
         : await publishImage({ imageUrl: hosted[0].up.cdnUrl, caption })]
       : [await publishCarousel({ items: hosted.map((h) => h.up.cdnUrl), caption })];
     // LinkedIn depois do Instagram: falha aqui não desfaz o post do Instagram; vira aviso.
-    const capa = hosted.find((h) => !h.video);
-    if (capa) {
-      try { ids.linkedin = await postLinkedIn(card, caption, capa.up.cdnUrl); }
-      catch (e) { ids.linkedin = `LinkedIn: FALHOU (${e.message})`; }
+    const imgs = hosted.filter((h) => !h.video);
+    if (imgs.length) {
+      try {
+        ids.linkedin = process.env.LINKEDIN_API_URL
+          ? await postLinkedInCarrossel(caption, imgs.map((h) => h.up.cdnUrl))
+          : await postLinkedIn(card, caption, imgs[0].up.cdnUrl);
+      } catch (e) { ids.linkedin = `LinkedIn: FALHOU (${e.message})`; }
     } else ids.linkedin = "LinkedIn: pulado (só vídeo)";
     return ids;
   } finally {
