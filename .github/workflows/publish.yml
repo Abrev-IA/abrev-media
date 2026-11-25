@@ -46,3 +46,5 @@ jobs:
           MEDIA_BRANCH: main
           TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
           TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
+          # LinkedIn via Make (cenário "ABREV - publicar no LinkedIn"). Sem o segredo, o passo é pulado.
+          LINKEDIN_WEBHOOK_URL: ${{ secrets.LINKEDIN_WEBHOOK_URL }}
