@@ -48,3 +48,5 @@ jobs:
           TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
           # LinkedIn via Make (cenário "ABREV - publicar no LinkedIn"). Sem o segredo, o passo é pulado.
           LINKEDIN_WEBHOOK_URL: ${{ secrets.LINKEDIN_WEBHOOK_URL }}
+          # Intermediário da API do LinkedIn no Make (carrossel). Tem prioridade sobre o de cima.
+          LINKEDIN_API_URL: ${{ secrets.LINKEDIN_API_URL }}
