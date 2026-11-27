@@ -13,18 +13,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Conferir notas e um parecer separadamente
-        run: |
-          node --input-type=module <<'JS'
-          import {login} from './art_runner.mjs';
-          const cookie=await login(),base='https://abrev-cockpit.administradorabrev.workers.dev';
-          const check=async(path,init)=>{const start=Date.now();const r=await fetch(base+path,init);console.log(path.split('?')[0],r.status,Math.round((Date.now()-start)/1000)+'s');if(!r.ok)throw Error((await r.text()).slice(0,160));return r.json()};
-          const headers={cookie,'content-type':'application/json'};
-          const result=await check('/api/editorial/fontes?tema=logistica%20reversa%20varejo%20devolucoes',{headers});
-          console.log(result.docs.map(x=>[x.id,x.trecho.length]));
-          const item=await check('/api/editorial/monthly',{method:'POST',headers,body:JSON.stringify({slots:[{dia:1,formato:'Carrossel'}],mes:12,ano:2026})});
-          console.log(item.pecas.map(x=>[x.dia,x.bib,x.prova]));
-          JS
+      - run: node cronograma.mjs --dry-run --mes=12 --ano=2026
         env:
           COCKPIT_USER: ${{ secrets.COCKPIT_USER }}
           COCKPIT_PASSWORD: ${{ secrets.COCKPIT_PASSWORD }}

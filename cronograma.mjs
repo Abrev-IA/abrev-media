@@ -171,12 +171,12 @@ async function editorialOficial(slots, ano, mes) {
   const cookie = await login();
   const base = process.env.COCKPIT_BASE || "https://abrev-cockpit.administradorabrev.workers.dev";
   const pecas = [];
-  for (let index = 0; index < slots.length; index += 3) {
+  for (let index = 0; index < slots.length; index += 1) {
     const response = await fetch(new URL("/api/editorial/monthly",base), {
       method:"POST", headers:{cookie,"content-type":"application/json"},
-      body:JSON.stringify({slots:slots.slice(index,index+3),ano,mes,anteriores:pecas.map(p=>p.tema)})
+      body:JSON.stringify({slots:slots.slice(index,index+1),ano,mes,anteriores:pecas.map(p=>p.tema)})
     });
-    const data = await response.json();
+    const data = await response.json().catch(()=>({error:"O cockpit interrompeu o parecer (HTTP "+response.status+")."}));
     if (!response.ok || !Array.isArray(data.pecas) || data.pecas.some(p=>!/^BIB_\d+$/.test(p.bib)||!/^[a-f0-9]{64}$/.test(p.prova)))
       throw Error(data.error || "Pauta sem parecer A99 e nota oficial.");
     pecas.push(...data.pecas);
