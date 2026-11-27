@@ -1,0 +1,19 @@
+name: Prévia do cronograma com notas oficiais
+on:
+  push:
+    branches: [codex/validar-pauta-oficial-20261127]
+permissions:
+  contents: read
+jobs:
+  previa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node cronograma.mjs --dry-run --mes=12 --ano=2026
+        env:
+          COCKPIT_USER: ${{ secrets.COCKPIT_USER }}
+          COCKPIT_PASSWORD: ${{ secrets.COCKPIT_PASSWORD }}
