@@ -13,15 +13,14 @@
 //      formato, que data comercial. É a parte que não pode variar de execução para
 //      execução, então não passa por modelo nenhum.
 //   2) EDITORIAL — tema, legenda, palavras visuais e a legenda do Stories de apoio.
-//      Sai do Claude quando há ANTHROPIC_API_KEY; sem a chave, sai do arquivo
-//      cronograma/<ano>-<mes>.json, que `--modelo` gera já com os slots preenchidos.
+//      Consulta notas oficiais, exige aprovação A99 e guarda o parecer no cockpit.
 //
 // Para cada peça cria DOIS cartões, como o mês de novembro fez à mão: a peça e o
 // Stories de apoio. Nenhum deles recebe `due` — `due` é o que o publicador usa para
 // decidir que venceu, e quem põe data é a etapa de aprovação, ao mover para "Agendado".
 // Cartão sem data em Rascunho é a trava que impede este script de publicar nada.
 //
-// Env: TRELLO_KEY, TRELLO_TOKEN. Opcionais: ANTHROPIC_API_KEY (camada editorial),
+// Env: TRELLO_KEY, TRELLO_TOKEN. COCKPIT_USER, COCKPIT_PASSWORD. Opcionais:
 //      TRELLO_LIST_RASCUNHO, CRONOGRAMA_MES (1-12), CRONOGRAMA_ANO.
 //
 // Uso: node --env-file=.env cronograma.mjs --dry-run   # mostra o plano, não escreve
@@ -29,7 +28,8 @@
 //      node cronograma.mjs --modelo                    # só gera o JSON do mês p/ preencher
 //      node --env-file=.env cronograma.mjs --mes=12 --ano=2026
 
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { login } from "./art_runner.mjs";
+import { writeFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -167,106 +167,22 @@ export function montarSlots(ano, mes) {
 // 2) EDITORIAL
 // ---------------------------------------------------------------------------
 
-// Os únicos números públicos que a ABREV usa. Serve de duas formas: entra no prompt
-// como a fonte permitida, e depois vira a lista branca da conferência de números.
-const DADOS_PUBLICOS = [
-  "~R$ 59 bilhões por ano é o custo da logística reversa no e-commerce brasileiro (cobertura Estadão/Brasil Inovador, set/2026)",
-  "12% é a taxa média de devolução no e-commerce brasileiro",
-  "3,6% é a taxa média de devolução no varejo físico",
-];
-const NUMEROS_PERMITIDOS = ["59", "12", "3,6", "3.6"];
-
-const BRIEF = `Você é o agente 01 (Planejamento Estratégico) da ABREV — Associação Brasileira de Reversa do Varejo.
-Monta a pauta editorial do mês para Instagram e LinkedIn.
-
-Posicionamento: a logística reversa — o caminho que o produto percorre de volta, do consumidor
-até o destino correto — é decisão de planejamento do varejo, não detalhe operacional.
-Tom executivo B2B, editorial e cativante; nunca publicitário, nunca alarmista.
-
-REGRA DURA SOBRE DADOS: use SOMENTE estes números públicos, e só quando couberem:
-${DADOS_PUBLICOS.map((d) => `- ${d}`).join("\n")}
-Não invente nenhuma outra estatística, percentual, valor, data ou estudo. Se um dado
-específico não está na lista, escreva a peça sem número.
-
-Para cada slot que eu listar, devolva:
-- tema: título curto da pauta, até 60 caracteres, sem o caractere "·"
-- legenda: o texto que vai publicado, 400 a 700 caracteres, em parágrafos curtos,
-  terminando numa linha só de hashtags que comece por #ABREV
-- visual: 3 a 5 palavras de OBJETO CONCRETO para buscar imagem (ex.: "caminhão, esteira,
-  caixa, galpão"). Não é o assunto, é o que aparece na foto.
-- stories: uma frase curta de apoio, para o Stories que acompanha a peça
-
-O mês precisa ler como uma sequência: a primeira peça abre o assunto, as do meio
-desenvolvem, a última fecha. Não repita o mesmo argumento em duas peças.`;
-
-async function editorialPorClaude(slots, ano, mes) {
-  const { default: Anthropic } = await import("@anthropic-ai/sdk");
-  const { z } = await import("zod");
-  const { zodOutputFormat } = await import("@anthropic-ai/sdk/helpers/zod");
-
-  const Pauta = z.object({
-    pecas: z.array(z.object({
-      dia: z.number().int(),
-      tema: z.string(),
-      legenda: z.string(),
-      visual: z.string(),
-      stories: z.string(),
-    })),
-  });
-
-  const lista = slots
-    .map((s) => `- dia ${s.dia} · ${s.formato}${s.gancho ? ` · gancho: ${s.gancho}` : ""}`)
-    .join("\n");
-
-  const client = new Anthropic();
-  const res = await client.messages.parse({
-    model: "claude-opus-5-5",
-    max_tokens: 16000,
-    thinking: { type: "adaptive" },
-    output_config: { effort: "high", format: zodOutputFormat(Pauta) },
-    system: BRIEF,
-    messages: [{
-      role: "user",
-      content: `Monte a pauta de ${MESES[mes - 1]}/${ano}. Slots:\n${lista}\n\n` +
-        `Devolva exatamente ${slots.length} peça(s), uma por slot, na ordem dos dias.`,
-    }],
-  });
-
-  // O modelo pode recusar (stop_reason "refusal") — nesse caso não há conteúdo para ler,
-  // e tratar como pauta vazia produziria um mês em branco sem explicar por quê.
-  if (res.stop_reason === "refusal") {
-    throw new Error(`a geração foi recusada (${res.stop_details?.category || "sem categoria"}).`);
+async function editorialOficial(slots, ano, mes) {
+  const cookie = await login();
+  const base = process.env.COCKPIT_BASE || "https://abrev-cockpit.administradorabrev.workers.dev";
+  const pecas = [];
+  for (let index = 0; index < slots.length; index += 3) {
+    const response = await fetch(new URL("/api/editorial/monthly",base), {
+      method:"POST", headers:{cookie,"content-type":"application/json"},
+      body:JSON.stringify({slots:slots.slice(index,index+3),ano,mes,anteriores:pecas.map(p=>p.tema)})
+    });
+    const data = await response.json();
+    if (!response.ok || !Array.isArray(data.pecas) || data.pecas.some(p=>!/^BIB_\d+$/.test(p.bib)||!/^[a-f0-9]{64}$/.test(p.prova)))
+      throw Error(data.error || "Pauta sem parecer A99 e nota oficial.");
+    pecas.push(...data.pecas);
   }
-  if (!res.parsed_output) throw new Error("a resposta não validou contra o schema da pauta.");
-  return res.parsed_output.pecas;
+  return pecas;
 }
-
-async function editorialDoArquivo(ano, mes) {
-  const arquivo = join(AQUI, "cronograma", `${ano}-${String(mes).padStart(2, "0")}.json`);
-  try {
-    const { pecas } = JSON.parse(await readFile(arquivo, "utf8"));
-    return pecas;
-  } catch (e) {
-    throw new Error(
-      `sem ANTHROPIC_API_KEY e sem ${arquivo}. Rode com --modelo para gerar o arquivo ` +
-      `com os slots do mês e preencha tema/legenda/visual/stories à mão.`,
-    );
-  }
-}
-
-// Conferência de números: qualquer algarismo na legenda que não esteja na lista branca
-// (nem seja o ano/mês) é dado inventado até prova em contrário. Não derruba a execução —
-// marca a peça, porque o e-mail do dia 20 ainda passa pela diretoria.
-function numerosSuspeitos(legenda, ano) {
-  const permitidos = new Set([...NUMEROS_PERMITIDOS, String(ano), String(ano).slice(2)]);
-  return [...String(legenda).matchAll(/\d+(?:[.,]\d+)?/g)]
-    .map((m) => m[0])
-    .filter((n) => !permitidos.has(n));
-}
-
-// ---------------------------------------------------------------------------
-// TRELLO
-// ---------------------------------------------------------------------------
 
 function tauth() {
   const key = process.env.TRELLO_KEY, token = process.env.TRELLO_TOKEN;
@@ -293,6 +209,7 @@ function montarDesc(peça, hoje) {
     peça.legenda.trim(),
     "",
     `[VISUAL] ${peça.visual.trim()}`,
+    `[ACERVO] ${peça.bib} | A99 ${peça.prova}`,
     `[RASCUNHO] Pauta gerada automaticamente em ${hoje}. Mantido em Rascunho; não autoriza nem dispara publicação.`,
   ].join("\n");
 }
@@ -343,10 +260,7 @@ async function run({ dryRun, refazer, modelo, mes, ano }) {
     }
   }
 
-  const pecas = process.env.ANTHROPIC_API_KEY
-    ? await editorialPorClaude(slots, ano, mes)
-    : await editorialDoArquivo(ano, mes);
-  console.log(`\ncamada editorial: ${process.env.ANTHROPIC_API_KEY ? "Claude" : "arquivo do mês"} — ${pecas.length} peça(s).`);
+  const pecas = await editorialOficial(slots, ano, mes);
 
   const porDia = new Map(pecas.map((p) => [Number(p.dia), p]));
   const faltando = slots.filter((s) => !porDia.has(s.dia));
@@ -371,54 +285,33 @@ async function run({ dryRun, refazer, modelo, mes, ano }) {
   }
 
   const hoje = new Date().toLocaleDateString("pt-BR");
-  const avisos = [];
   let criados = 0;
 
   for (const slot of slots) {
     const p = porDia.get(slot.dia);
     const tema = String(p.tema).replace(/·/g, "-").trim();
     const titulo = `${dd(slot.dia)}/${dd(mes)} · ${slot.formato} · ${tema}`;
-    const suspeitos = numerosSuspeitos(p.legenda, ano);
-    if (suspeitos.length) avisos.push(`${dd(slot.dia)}/${dd(mes)} — número não previsto: ${suspeitos.join(", ")}`);
-
     const tituloStories = `${dd(slot.dia)}/${dd(mes)} · Stories · apoio ${slot.formato === "Newsletter" ? "à" : "ao"} ${slot.formato} "${tema}"`;
-    const descStories = montarDesc({ legenda: p.stories, visual: p.visual }, hoje);
+    const descStories = montarDesc({ ...p, legenda: p.stories }, hoje);
 
     if (dryRun) {
-      console.log(`\nDRY: ${titulo}`);
+      console.log(`\nDRY: ${titulo} · ${p.bib} · A99 ${p.prova}`);
       console.log(`     ${String(p.legenda).replace(/\n+/g, " ").slice(0, 120)}...`);
       console.log(`     [VISUAL] ${p.visual}`);
       console.log(`DRY: ${tituloStories}`);
       continue;
     }
-    const cartao = await criarCartao(titulo, montarDesc(p, hoje));
+    await criarCartao(titulo, montarDesc(p, hoje));
     await criarCartao(tituloStories, descStories);
     criados += 2;
     console.log(`OK: ${titulo}`);
 
-    // O aviso de número viaja COM o cartão, não só no log do workflow. Assim ele chega
-    // junto no e-mail do dia 20 e em quem abre o cartão — um aviso que morre no log de
-    // uma execução do dia 12 não protege ninguém da estatística inventada.
-    if (suspeitos.length) {
-      await trello(`/cards/${cartao.id}/actions/comments`, {
-        text: `⚠️ Conferir antes de aprovar: a legenda cita ${suspeitos.join(", ")}, ` +
-          `que não está na lista de dados públicos da ABREV. Confirmar a fonte ou tirar o número.`,
-      }, "POST").catch(() => {});
-    }
   }
 
   console.log(dryRun
     ? `\n[DRY-RUN] ${slots.length * 2} cartão(ões) seriam criados. Nada foi escrito no Trello.`
     : `\n${criados} cartão(ões) criados em Rascunho.`);
 
-  // De propósito NÃO mexe no exitCode: os cartões foram criados, então o passo cumpriu o
-  // que tinha para fazer. Pintar o job de vermelho por causa de um "5 sinais" na legenda
-  // faria o dia 12 parecer quebrado todo mês, e aí ninguém mais olha quando quebrar de
-  // verdade. O aviso está no cartão, que é onde a decisão acontece.
-  if (avisos.length) {
-    console.log("\n*** CONFERIR ANTES DE APROVAR (comentado nos cartões) ***");
-    for (const a of avisos) console.log("  " + a);
-  }
 }
 
 const args = process.argv.slice(2);

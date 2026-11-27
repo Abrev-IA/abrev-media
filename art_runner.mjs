@@ -52,7 +52,7 @@ export async function login() {
 const COMPOSITION_HINT =
   " ORIENTAÇÃO DE REDAÇÃO (guia de escrita, não é critério de reprovação): o espaço da arte é" +
   " limitado, então escreva enxuto — título curto e forte, subtítulo direto, e no máximo duas" +
-  " informações por página, preservando os fatos (ex.: R$ 59 bi). Priorize legibilidade e respiro;" +
+  " informações por página, preservando os fatos. Priorize legibilidade e respiro;" +
   " o Designer ajusta a quebra de linhas conforme a composição.";
 
 // Quando sobe uma foto do banco, o Designer precisa saber que ela e PARA USAR, nao uma
@@ -87,7 +87,7 @@ function toPayload(b) {
 // Resposta padrão para a triagem — mantém a autonomia sem inventar dados.
 const AUTO_ANSWER =
   "Use o próprio tema/objetivo deste briefing como base e derive daí o título (curto) e a mensagem. " +
-  "Dados: apenas os já públicos da ABREV citados no briefing (logística reversa no varejo; custo setorial ~R$ 59 bilhões/ano no e-commerce); " +
+  "Dados: use exclusivamente a fonte técnica do briefing aprovada para esta pauta; " +
   "NÃO inventar números, datas ou fatos novos — se um dado específico não estiver no briefing, omita. " +
   "Escopo: logística reversa no varejo, tom executivo B2B. O Designer decide a composição e a imagem.";
 
@@ -193,7 +193,7 @@ async function ensureApproved(cookie, id, maxRevise = 1) {
       "O Auditor visual devolveu a peça com este parecer: " +
       reason.replace(/\s+/g, " ").slice(0, 300) +
       " Reescreva o texto mais enxuto para caber com folga, preservando os fatos essenciais " +
-      "(ex.: o dado de R$ 59 bi). Mantenha o tom executivo.";
+      "da fonte aprovada. Mantenha o tom executivo.";
     await runStream(cookie, id, { action: "revise", feedback });
   }
   return false;

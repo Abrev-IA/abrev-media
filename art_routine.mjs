@@ -9,7 +9,7 @@
 import { mkdtemp, rm, readFile, writeFile, copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { produceArts } from "./art_runner.mjs";
+import { login, produceArts } from "./art_runner.mjs";
 
 // O banco local são 146 MB de PNG na máquina do Alan; o repositório que o cron usa não
 // tem nem o módulo nem as imagens. Import estático derrubava a rotina inteira lá com
@@ -82,7 +82,7 @@ function buildBriefing(card, fmt) {
     objetivo: `${tema}. ${caption}`.slice(0, 650),
     canais: ["Instagram", "LinkedIn"],
     formatos: fmt.formatos,
-    fonte: "Posicionamento institucional da ABREV sobre logística reversa no varejo; custo setorial ~R$ 59 bi (cobertura Estadão/Brasil Inovador, set/2026). Só dados públicos; não inventar estatísticas/datas. Tom executivo B2B, editorial e cativante. Logo oficial ABREV. ARTE NO TEMA ESCURO: usar theme dark (fundo azul petróleo da identidade, texto claro, bloco de informações escuro). Não usar fundo branco. IMAGEM SEMPRE FOTORREALISTA: fotografia ou imagem indistinguível de fotografia — cena real de operação, produto ou pessoas. NUNCA cartoon, desenho, ilustração, vetor, flat design ou 3D estilizado. Havendo mídia de apoio anexada, usar essa foto em vez de criar imagem nova.",
+    fonte: card.officialSource || "Siga a fonte técnica indicada no briefing e consulte a Biblioteca ABREV para afirmações técnicas.",
     dimensoes: "1024x1024",
     paginas: fmt.paginas,
   };
@@ -254,6 +254,7 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false, re
     return;
   }
 
+  let session;
   for (const card of cards) {
     const fmt = parseFormat(card.name);
     const artesAntigas = (card.attachments || []).filter((a) => a.isUpload && /\.png$/i.test(a.name || ""));
@@ -263,6 +264,27 @@ async function run(listId = LIST_RASCUNHO, { dryRun = false, refazer = false, re
     const faltaSoOVideo = artesAntigas.length && !refazer && fmt.cover && (!temVideo || refazerReels);
     if (artesAntigas.length && !refazer && !faltaSoOVideo) {
       console.log("JÁ TEM ARTE:", card.name); summary.push(`TEM   ${card.name}`); continue;
+    }
+    if (/Pauta gerada automaticamente|^\[ACERVO\]/im.test(card.desc || "")) {
+      try {
+        const proof = card.desc.match(/^\[ACERVO\] (BIB_\d+) \| A99 ([a-f0-9]{64})$/m);
+        if (!proof) throw Error("Pauta anterior sem comprovação do acervo.");
+        session ||= await login();
+        const base = process.env.COCKPIT_BASE || "https://abrev-cockpit.administradorabrev.workers.dev";
+        const response = await fetch(new URL("/api/editorial/monthly?id="+proof[2],base),{headers:{cookie:session}});
+        if (!response.ok) throw Error("Parecer indisponível.");
+        const review = await response.json();
+        const titulo = review.tema.replace(/·/g,"-").trim();
+        const date = [review.dia,review.mes].map(n=>String(n).padStart(2,"0")).join("/");
+        const feed = date+" · "+review.formato+" · "+titulo;
+        const story = date+' · Stories · apoio '+(review.formato==="Newsletter"?"à":"ao")+' '+review.formato+' "'+titulo+'"';
+        if(review.auditor!=="A99" || review.bib!==proof[1] || ![feed,story].includes(card.name) ||
+           legendaDoCard(card.desc)!==(card.name===story?review.stories:review.legenda).trim() ||
+           (card.desc.match(/^\[VISUAL\] ([\s\S]*?)\r?\n\[ACERVO\]/m)?.[1]||"").trim()!==review.visual.trim()) throw Error("Cartão diverge da versão aprovada.");
+        card.officialSource=[review.bib,review.tituloFonte,review.trecho,review.nota].join("\n");
+      } catch(error) {
+        summary.push("BLOQUEADO "+card.name+" — "+error.message); process.exitCode=1; continue;
+      }
     }
     if (dryRun) {
       const troca = artesAntigas.length ? ` (substitui ${artesAntigas.length} arte(s) atual(is))` : "";
