@@ -180,6 +180,7 @@ async function editorialOficial(slots, ano, mes) {
     if (!response.ok || !Array.isArray(data.pecas) || data.pecas.some(p=>!/^BIB_\d+$/.test(p.bib)||!/^[a-f0-9]{64}$/.test(p.prova)))
       throw Error(data.error || "Pauta sem parecer A99 e nota oficial.");
     pecas.push(...data.pecas);
+    for (const item of data.pecas) console.log(`Pauta de ${item.dia}/${mes} aprovada pelo A99 · ${item.bib} · ${item.prova}`);
   }
   return pecas;
 }
